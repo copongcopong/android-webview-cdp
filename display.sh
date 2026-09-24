@@ -1,65 +1,49 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Put pi-webview-shell on a secondary display, and say whether that display can
-# produce pixels.
+# Put pi-webview-shell on a secondary display, off the phone screen.
 #
-# Two backends — you do NOT need pi-trackpad for the first one:
-#
-#   ./display.sh overlay [WxH@dpi]   adb only. Creates a simulated secondary display
-#                                    via the `overlay_display_devices` global setting
-#                                    (default 1080x2340@420 = a normal phone), launches
-#                                    the shell there and resizes its task to fill it.
-#   ./display.sh overlay-off         clear that setting, app back to the phone
-#
-#   ./display.sh headless            pi-trackpad's display, OFF (no pixels)
-#   ./display.sh visible             pi-trackpad's display, surface-backed (renders)
-#   ./display.sh show | hide         attach/detach that surface
-#   ./display.sh none                destroy pi-trackpad's display
-#
+#   ./display.sh overlay [WxH@DPI]   create a simulated secondary display (adb only),
+#                                    launch the shell there, size it to fill it
+#   ./display.sh overlay-off         clear the setting, app back to the phone screen
 #   ./display.sh status              what exists right now
 #
-# Why the overlay backend is the default choice
-# --------------------------------------------
-# `settings put global overlay_display_devices "1080x2340/420"` asks system_server to
-# create a simulated display, so it needs nothing but adb (shell holds
-# WRITE_SECURE_SETTINGS). It is **phone-sized natively** — the WebView fills it at
-# 411x851 CSS px / dpr 2.625, so `--device` emulation is optional and a screenshot comes
-# back at the display's own resolution (1082x2237) instead of being clamped to a float
-# surface. It renders (visibilityState=visible, rAF runs) and it is not drawn on the
-# phone screen.
+# How it works: `settings put global overlay_display_devices "1080x2340/420"` asks
+# system_server to create a simulated secondary display. Shell holds
+# WRITE_SECURE_SETTINGS, so adb alone can do it — no root, no accessibility service,
+# no companion app. The display is phone-sized natively: the WebView fills it at
+# 411x851 CSS px / dpr 2.625 and renders off-screen, so screenshots come back at the
+# display's own resolution (1082x2237) with no emulation and no clamping.
 #
-# Caveats: it is a persisted global setting (cleared by `overlay-off`, and it comes back
-# after a reboot until you clear it); a freshly launched app lands in a small freeform
-# window on it, which is why this script resizes the task; and only adb can create it.
-# Clear it with `settings delete global overlay_display_devices` — `settings put ... ""`
-# fails with "Bad arguments".
+# Measured, not assumed: rendering works (visibilityState=visible, rAF runs), CDP input
+# injection works, and the relay keeps serving with no adb forward.
 #
-# pi-trackpad's display (the other backend) needs that app installed with its
-# accessibility service enabled and Shizuku granted, because a PUBLIC task-hosting
-# display requires shell UID. Use it when you want its headless/visible/surface
-# toggling, or when you have no adb.
+# Four things that bite — all found the hard way:
+#   * `settings put global overlay_display_devices ""` fails with "Bad arguments";
+#     clear it with `settings delete` (what overlay-off does)
+#   * the setting wants WxH/DPI, not WxH@DPI (either is accepted here, normalised)
+#   * `am start --display N` on a running activity MOVES the task, keeping the old
+#     window size and carrying the previous display's density with it — so stop the
+#     app first, or you silently get 480x993 CSS at dpr 2.25 instead of 411x851 at 2.625
+#   * a task keeps its bounds when the display changes, so a window can arrive *larger*
+#     than the new display; the task is therefore sized unconditionally
 #
-# Measured on SM-F936B / Android 16:
-#
-#   kind                              JS/DOM/net  CDP input  rAF        screenshot
-#   overlay display (this script)     yes         yes        yes        yes (native size)
-#   pi-trackpad visible               yes         yes        yes        yes (float surface)
-#   pi-trackpad headless              yes         yes        NEVER      times out
+# The setting is persisted: the display is recreated after a reboot until you clear it.
 set -euo pipefail
 
 PKG=com.pi.webview
 ACTIVITY="$PKG/.MainActivity"
-DEVICE_PROFILE="${DEVICE_PROFILE:-pixel-7}"
 OVERLAY_SPEC="${OVERLAY_SPEC:-1080x2340/420}"
-VDISPLAY="${VDISPLAY:-$HOME/trackpad/skills/pi-vdisplay/scripts/vdisplay}"
 ADB="${ADB:-adb}"
 
-# ---------------------------------------------------------------- shared helpers
 display_of_app() {
     $ADB shell dumpsys activity activities 2>/dev/null \
         | awk '/Display #/{d=$2} /com\.pi\.webview\/\.MainActivity/{print d; exit}'
 }
 relay_up() {
     [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:9334/json/version 2>/dev/null || true)" = "200" ]
+}
+relay_line() {
+    if relay_up; then printf 'relay        UP on 127.0.0.1:9334 (no adb forward)\n'
+    else printf 'relay        DOWN — is the app running? (./cdp-webview.sh up)\n'; fi
 }
 all_ids() { $ADB shell dumpsys display 2>/dev/null | grep -oE 'mDisplayId=[0-9]+' | cut -d= -f2 | sort -un | tr '\n' ' '; }
 task_on_display() {
@@ -69,12 +53,7 @@ task_on_display() {
             if (match($0, /t[0-9]+/)) { print substr($0, RSTART + 1, RLENGTH - 1); exit }
         }'
 }
-relay_line() {
-    if relay_up; then printf 'relay        UP on 127.0.0.1:9334 (no adb forward)\n'
-    else printf 'relay        DOWN — is the app running? (./cdp-webview.sh up)\n'; fi
-}
 
-# ---------------------------------------------------------------- overlay backend
 overlay() {
     local spec="${1:-$OVERLAY_SPEC}"
     # Accept WxH@DPI or WxH/DPI. The *setting* only understands the slash form
@@ -105,14 +84,12 @@ overlay() {
         [ -n "$id" ] && break
         sleep 1
     done
-    [ -n "${id:-}" ] || { echo "no new display appeared for spec '$spec'" >&2; exit 1; }
+    [ -n "${id:-}" ] || { echo "no new display appeared for '$setting'" >&2; exit 1; }
 
-    printf 'display id   %s (overlay, %s — created via overlay_display_devices)\n' "$id" "$spec"
+    printf 'display id   %s (overlay, %s)\n' "$id" "$setting"
 
-    # Stop first, then launch on the display. *Moving* an existing task onto it (what
-    # `am start --display` does when the activity is already running) keeps the old
-    # window size and carries the previous display's density with it — you get 480x993
-    # CSS at dpr 2.25 instead of 411x851 at 2.625. A fresh launch fills the display.
+    # Stop first, then launch on the display: *moving* an existing task onto it keeps the
+    # old window size and the previous display's density.
     $ADB shell am force-stop "$PKG" >/dev/null 2>&1 || true
     sleep 1
     $ADB shell am start --display "$id" -f 0x10000000 -n "$ACTIVITY" >/dev/null 2>&1 || true
@@ -141,51 +118,6 @@ overlay() {
     relay_line
 }
 
-# ---------------------------------------------------------------- pi-trackpad backend
-[ -x "$VDISPLAY" ] || VDISPLAY=""
-vd() { "$VDISPLAY" "$@" 2>&1 | tail -1; }
-vd_status() { vd status; }
-field() { printf '%s\n' "$1" | grep -o "$2=[^ ]*" | cut -d= -f2; }
-
-launch_on() {
-    local id="$1"
-    $ADB shell am start --display "$id" -f 0x10000000 -n "$ACTIVITY" >/dev/null 2>&1 || true
-    for _ in $(seq 1 10); do
-        [ "$(display_of_app)" = "#$id" ] && break
-        sleep 0.5
-    done
-    printf 'app display  %s\n' "$(display_of_app)"
-}
-wait_kind() {
-    local want="$1" s
-    for _ in $(seq 1 15); do
-        s="$(vd_status)"
-        [ "$(field "$s" kind)" = "$want" ] && { printf '%s\n' "$s"; return 0; }
-        sleep 1
-    done
-    printf '%s\n' "${s:-<no status>}"; return 1
-}
-report() {
-    local id="$1" kind="$2" surface="$3"
-    printf 'display id   %s (%s, surface=%s)\n' "$id" "$kind" "$surface"
-    if [ "$surface" = "alive" ]; then
-        printf 'pixels       YES — visibilityState=visible, rAF runs, screenshots work\n'
-        printf 'screenshot:  node cdp.mjs --device %s --shot shot.png\n' "$DEVICE_PROFILE"
-    elif [ "$kind" = "floating" ]; then
-        printf 'pixels       NO  — visible-capable display but its surface is detached\n'
-        printf '             (screen off, or the float window is hidden) — try: %s show\n' "$0"
-    else
-        printf 'pixels       NO  — headless: screenshots time out, rAF never fires\n'
-        printf "still works: node cdp.mjs --device %s 'document.title'   (JS/DOM/network/input)\n" "$DEVICE_PROFILE"
-    fi
-    relay_line
-}
-
-require_trackpad() {
-    [ -n "$VDISPLAY" ] || { echo "pi-trackpad's vdisplay script not found (set VDISPLAY=...)" >&2; exit 1; }
-}
-
-# ---------------------------------------------------------------- verbs
 case "${1:-status}" in
   overlay)
     overlay "${2:-}"
@@ -196,49 +128,13 @@ case "${1:-status}" in
     $ADB shell am start -n "$ACTIVITY" >/dev/null 2>&1 || true
     printf 'overlay-display setting cleared; app display %s\n' "$(display_of_app)"
     ;;
-  headless)
-    require_trackpad
-    vd create --headless >/dev/null
-    S="$(wait_kind headless)" || { echo "display did not come up: $S" >&2; exit 1; }
-    ID="$(field "$S" id)"; [ "$ID" != "-1" ] || { echo "no display id in: $S" >&2; exit 1; }
-    launch_on "$ID"; report "$ID" "$(field "$S" kind)" "$(field "$S" surface)"
-    ;;
-  visible)
-    require_trackpad
-    vd create >/dev/null
-    S="$(wait_kind floating)" || { echo "display did not come up: $S" >&2; exit 1; }
-    vd show >/dev/null || true
-    S="$(vd_status)"
-    ID="$(field "$S" id)"; [ "$ID" != "-1" ] || { echo "no display id in: $S" >&2; exit 1; }
-    launch_on "$ID"; report "$ID" "$(field "$S" kind)" "$(field "$S" surface)"
-    ;;
-  phone)
-    require_trackpad
-    "$0" visible >/dev/null
-    ID="$(field "$(vd_status)" id)"
-    printf 'applying device profile %s on display %s\n' "$DEVICE_PROFILE" "$ID"
-    node cdp.mjs --device "$DEVICE_PROFILE" --shot phone.png
-    printf 'screenshot   %s/phone.png\n' "$PWD"
-    ;;
-  show|hide)
-    require_trackpad
-    vd "$1"; S="$(vd_status)"
-    report "$(field "$S" id)" "$(field "$S" kind)" "$(field "$S" surface)"
-    ;;
-  none)
-    require_trackpad
-    vd destroy
-    $ADB shell am start -n "$ACTIVITY" >/dev/null 2>&1 || true
-    printf 'app display  %s (back on the phone)\n' "$(display_of_app)"
-    ;;
   status)
     printf 'overlay set  %s\n' "$($ADB shell settings get global overlay_display_devices | tr -d '\r')"
     printf 'displays     %s\n' "$(all_ids)"
     printf 'app display  %s\n' "$(display_of_app)"
-    if [ -n "$VDISPLAY" ]; then printf 'vdisplay     %s\n' "$(vd_status)"; else printf 'vdisplay     (pi-trackpad not installed)\n'; fi
     relay_line
     ;;
   *)
-    sed -n '2,20p' "$0"; exit 1
+    sed -n '2,10p' "$0"; exit 1
     ;;
 esac

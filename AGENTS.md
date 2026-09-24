@@ -7,8 +7,6 @@ socket is reachable from Termux**, plus the Termux-side tooling to drive it.
 Built on-device with a **hand-rolled build** (`build.sh`) — **no Gradle, no Android
 SDK package, no Kotlin**; the app is plain Java.
 
-Companion to `~/trackpad` (Pi Trackpad) and a `-A assets` variant of its `build.sh`.
-
 ## Build & install
 
 On a new machine, run the read-only checkup first — it prints what is missing and the exact
@@ -27,8 +25,8 @@ adb install -r out/pi-webview.apk
 adb shell am start -n com.pi.webview/.MainActivity            # optionally --display <id>
 ```
 
-`build.sh` looks for `sdk/platforms/android-36/android.jar` and falls back to
-`~/trackpad/sdk/...`. `keystore.jks` (signing key), `out/`, `build/` are gitignored.
+`build.sh` needs `sdk/platforms/android-36/android.jar` (27 MB, not in the repo — `setup.sh`
+fetches it). `keystore.jks` (signing key), `out/`, `build/` are gitignored.
 
 Everything needed before this is in the README's *Prerequisites — setting up a fresh Android
 device*: Termux package list (`aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3
@@ -56,7 +54,7 @@ Two traps for a fresh checkout:
 | `build.sh` | the hand-rolled build pipeline |
 | `cdp-webview.sh` | `up` / `direct` / `status` / `info` / `down` |
 | `cdp.mjs` | dependency-free CDP client (Node 22+ global `WebSocket`), incl. `--device` profiles |
-| `display.sh` | drives pi-trackpad's `vdisplay` to run this app on a virtual display |
+| `display.sh` | runs the app on a simulated phone-sized secondary display, off-screen |
 ### Two mechanisms worth understanding before changing anything
 
 1. **Why adb, and why a relay.** The DevTools server listens on the abstract unix
@@ -79,15 +77,13 @@ Two traps for a fresh checkout:
   (someone else's — do not take them). Both 9333 and 9334 bind the *same* device
   loopback, so they can never be the same port.
 
-## Displays (two backends)
+## Displays
 
-`display.sh overlay [WxH@DPI]` is the **default** and has **no pi-trackpad dependency**: it
-writes the `overlay_display_devices` global setting (shell holds `WRITE_SECURE_SETTINGS`, so
-adb suffices), which makes system_server create a simulated secondary display. Phone-sized
-by construction — 1080×2340/420 gives the shell 411×851 CSS px at dpr 2.625 — and it renders
-off-screen at native resolution. `display.sh headless|visible|show|hide|none` are the
-optional pi-trackpad/Shizuku backend, needed only because a PUBLIC task-hosting display
-otherwise requires shell UID.
+`display.sh overlay [WxH@DPI]` writes the `overlay_display_devices` global setting (shell holds
+`WRITE_SECURE_SETTINGS`, so adb suffices), which makes system_server create a simulated
+secondary display. Phone-sized by construction — 1080×2340/420 gives the shell 411×851 CSS px
+at dpr 2.625 — and it renders off-screen at native resolution. No root, no Shizuku, no
+accessibility service, no other app.
 
 Four things that will bite:
 
@@ -99,14 +95,9 @@ Four things that will bite:
 - **Force-stop before launching onto the display.** `am start --display N` on a running
   activity *moves* the task: it keeps the old window size and carries the previous display's
   density, so you get 480×993 CSS at dpr 2.25 instead of 411×851 at 2.625. Launch fresh, then
-  `am task resize <taskId> 0 0 <w> <h>` only if the window did not fill the display.
+  `am task resize <taskId> 0 0 <w> <h>`.
 - **`screencap` cannot see simulated displays** — `-a` lists only physical ones, `-d` takes
   the SurfaceFlinger token and rejects a virtual display's. Capture with CDP `--shot`.
-
-A headless (`state=OFF`) pi-trackpad display gives no pixels at all (`visibilityState`
-`hidden`, rAF never fires, `captureScreenshot` times out) — though JS, DOM, network, timers
-and **CDP input injection** all still work, because CDP input is injected browser-side rather
-than as Android input.
 
 ### Stopping
 
@@ -142,9 +133,9 @@ rows up without re-testing.
 `Input.dispatchMouseEvent`/`insertText`/`dispatchKeyEvent`; `Page.navigate` to external
 sites; `Network.*` events; `Page.captureScreenshot`; relay on 9334 with an empty
 `adb forward` table; the Java bridge crossing (`pi.info()` matched `pidof`); running on
-display 17 (XREAL), a pi-trackpad virtual display, and an `overlay_display_devices`
-simulated display (411x851 CSS @2.625, native 1082x2237 captures, and a full-retina
-1170x2532 when the display is sized 1200x2700).
+display 17 (XREAL) and an `overlay_display_devices` simulated display (411x851 CSS @2.625,
+native 1082x2237 captures, and a full-retina 1170x2532 when the display is sized 1200x2700).
+A real network site is navigated and asserted as part of `setup.sh`'s verification.
 
 **Not verified:** multiple simultaneous CDP clients on one target; a WebSocket held open
 for hours through the relay; a WebView in a `TYPE_ACCESSIBILITY_OVERLAY` window.

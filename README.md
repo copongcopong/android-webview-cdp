@@ -50,6 +50,12 @@ with no adb forward:
 
 ![example.com on a simulated 1080x2340 phone display, captured at native size](docs/img/native-phone-display.png)
 
+**A real network site at a real phone viewport** — `pi.dev` → its extensions page, which is
+what `setup.sh` asserts as part of verification. 411×851 CSS px at dpr 2.625, captured at the
+display's native 1082×2237:
+
+![pi.dev documentation, extensions page, at a phone viewport](docs/img/pi-dev-extensions.png)
+
 ## Prerequisites — setting up a fresh Android device
 
 ### The whole thing, scripted
@@ -184,6 +190,7 @@ Each step has an unambiguous check — useful when an agent is driving:
 | relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
 | CDP | `node cdp.mjs 'document.title'` | `Pi WebView Shell` |
 | input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__pi.taps()'` | counter +1 |
+| real site | `node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 'document.querySelector("h1").textContent'` | `Extensions` |
 | capture | `node cdp.mjs --shot shot.png` | PNG written, non-zero |
 | off-screen | `./display.sh overlay` | a display id and `411x851` CSS |
 
@@ -307,17 +314,21 @@ bash ./setup.sh
   ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
   ok    CDP round-trip: document.title = "Pi WebView Shell"
   ok    input injection: taps 0 → 1
-  warn  screenshot not attempted: page is 'hidden', so there are no frames to capture
-        pixels need a visible window — ./display.sh overlay gives one off-screen
+  ok    real site: pi.dev → extensions ({"h1":"Extensions","path":"/docs/latest/extensions"})
+  ok    screenshot: setup-check.png (phone-sized capture of that page)
 ```
 
 The signature warning is expected on a fresh clone and handled automatically: no signing key is
 committed, so `build.sh` generated one (`CN=Pi WebView`) and Android refused to update the
 app installed from a different key — hence uninstall + reinstall.
 
-The screenshot line is the other real behaviour: the page was **hidden** (its window was not on
-screen), and a hidden page has no frames to capture. It is reported as skipped with the fix
-rather than as a failure. Taking the advice:
+Two lines there are worth explaining. **`real site: pi.dev → extensions`** is the flow
+navigating to a real network site, waiting for its `<h1>`, and reading the DOM back — the
+bundled page only proves the WebView works, this proves the arrangement does. **The screenshot
+line is conditional**: a page whose window is not on screen reports `visibilityState: hidden`,
+has no frames to capture, and is reported as skipped with the fix rather than as a failure.
+That is what the first pass through this flow showed, before the app was on a display. Taking
+the advice:
 
 ### 6. Off-screen, phone-sized, with pixels
 
@@ -330,8 +341,12 @@ pixels       YES — renders off-screen; capture at the display size, no clampin
 relay        UP on 127.0.0.1:9334 (no adb forward)
 
 $ node cdp.mjs --shot clone-shot.png
-screenshot -> clone-shot.png            # 1082x2237 PNG
+screenshot -> clone-shot.png            # 1082x2237 PNG of whatever page is loaded
 ```
+
+(That capture is the one in [Screenshots](#screenshots): `pi.dev`'s extensions page at a phone
+viewport. The flow returns the app to its own page afterwards, so it is not left on someone
+else's site.)
 
 ### What that run proves
 

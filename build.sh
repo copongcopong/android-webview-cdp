@@ -1,17 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Hand-rolled Android build for Termux/aarch64 — adapted from ~/trackpad/build.sh.
-# Differences: no aidl, no external jars, and assets/ is linked in (-A).
+# Hand-rolled Android build for Termux/aarch64.
+# No Gradle, no Android SDK install: aapt2 -> javac -> d8 -> alignment check -> apksigner.
+# No aidl, no external jars, and assets/ is linked in (-A).
 # aapt2 -> javac -> d8 -> package -> alignment check -> apksigner
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 ANDROID_JAR="$ROOT/sdk/platforms/android-36/android.jar"
-# Reuse the platform jar already fetched for pi-trackpad if this project has none.
-if [ ! -f "$ANDROID_JAR" ] && [ -f "$HOME/trackpad/sdk/platforms/android-36/android.jar" ]; then
-  ANDROID_JAR="$HOME/trackpad/sdk/platforms/android-36/android.jar"
-  echo "    (using $ANDROID_JAR)"
-fi
-[ -f "$ANDROID_JAR" ] || { echo "missing android.jar — see README"; exit 1; }
+[ -f "$ANDROID_JAR" ] || {
+  echo "missing $ANDROID_JAR (27 MB, deliberately not in the repo)." >&2
+  echo "Get it with:  ./setup.sh    — or by hand:" >&2
+  echo "  curl -LO https://dl.google.com/android/repository/platform-36_r02.zip" >&2
+  echo "  unzip -j platform-36_r02.zip android-36/android.jar -d sdk/platforms/android-36/" >&2
+  exit 1
+}
 
 BUILD="$ROOT/build"
 OUT="$ROOT/out"

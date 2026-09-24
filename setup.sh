@@ -18,8 +18,6 @@
 #
 # What it CANNOT do — these need your hands on the phone, and it tells you so:
 #   * enable Developer options / Wireless debugging, and the one-time `adb pair`
-#   * grant Shizuku permission (only for the alternate display backend)
-#   * install pi-trackpad (likewise optional)
 # Everything else it handles, including the traps: a missing `zip`, a platform jar that
 # was never downloaded, and the signature clash from a fresh checkout.
 #
@@ -110,8 +108,6 @@ fi
 step "android platform jar"
 if [ -f "$JAR_REL" ]; then
     ok "$JAR_REL ($(du -h "$JAR_REL" | cut -f1))"
-elif [ -f "$HOME/trackpad/sdk/platforms/android-36/android.jar" ]; then
-    ok "not here, but ~/trackpad has one — build.sh falls back to it"
 elif [ "$MODE" = check ]; then
     bad "$JAR_REL missing (27 MB platform jar, deliberately not in the repo)"
     fix "curl -LO $JAR_URL && unzip -j platform-36_r02.zip android-36/android.jar -d sdk/platforms/android-36/"
@@ -207,15 +203,28 @@ else
             else
                 warn "input injection: taps $BEFORE → $AFTER (expected +1)"
             fi
+            # A real network site at phone size — the point of the whole arrangement. The
+            # bundled page above only proves the WebView works; this proves the pipeline
+            # drives the open web at a mobile viewport and can read the result back.
+            node cdp.mjs --nav https://pi.dev --wait body >/dev/null 2>&1 || true
+            PI="$(node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 \
+                  'JSON.stringify({h1:document.querySelector("h1").textContent,path:location.pathname})' 2>/dev/null | tail -1)"
+            case "$PI" in
+                *'"h1":"Extensions"'*) ok "real site: pi.dev → extensions ($PI)" ;;
+                *) warn "pi.dev extensions page gave: ${PI:-<no response>}" ;;
+            esac
+
             VIS="$(node cdp.mjs 'document.visibilityState' 2>/dev/null | tail -1)"
             if [ "$VIS" = "visible" ]; then
                 node cdp.mjs --shot setup-check.png >/dev/null 2>&1 \
-                    && ok "screenshot: setup-check.png" \
+                    && ok "screenshot: setup-check.png (phone-sized capture of that page)" \
                     || warn "screenshot failed although the page reports visible"
             else
                 warn "screenshot not attempted: page is '$VIS', so there are no frames to capture"
                 info "pixels need a visible window — ./display.sh overlay gives one off-screen"
             fi
+            # leave the app on its own page rather than someone else's website
+            node cdp.mjs --nav file:///android_asset/index.html >/dev/null 2>&1 || true
         else
             bad "CDP answered but document.title was '$TITLE'"
         fi
