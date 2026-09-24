@@ -2,8 +2,8 @@
 
 A 16 KB single-Activity Android app that hosts a **WebView you can drive over the
 Chrome DevTools Protocol from Termux** — plus the Termux-side tooling to do it.
-Built on-device, no Gradle, no Android SDK (same hand-rolled pipeline as
-`~/trackpad`).
+Built on-device, no Gradle, no Android SDK — a hand-rolled `build.sh`
+(aapt2 → javac → d8 → apksigner).
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
@@ -31,7 +31,7 @@ on the **device's own loopback**.
 All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e. the same
 `Page.captureScreenshot` path documented below, not a phone screenshot:
 
-**The shell on a surface-backed virtual display** (1247×1398 px — pi-trackpad's float surface):
+**The shell on a virtual display** (1247×1398 px):
 
 ![Pi WebView Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
 
@@ -73,6 +73,10 @@ with an unambiguous verdict, and in checkup mode it writes nothing at all.
 Run it as `bash ./setup.sh` — the shebang is a Termux absolute path, so that form also keeps
 working if you are on a laptop with a USB phone.
 
+> **See it done for real:** [*A real run, start to finish*](#a-real-run-start-to-finish) below
+> walks the whole thing on a phone that had nothing but Termux installed, including the adb
+> pairing that actually gave trouble.
+
 **What it cannot do** (it says so, and tells you who can):
 
 | not scriptable | why |
@@ -80,7 +84,6 @@ working if you are on a laptop with a USB phone.
 | install Termux | you are reading this from Termux; it is the one hard prerequisite |
 | enable Developer options / Wireless debugging | Settings UI only |
 | `adb pair` the device | one-time, needs the pairing code on screen |
-| install pi-trackpad, grant Shizuku | only needed for the alternate display backend |
 
 ### The device
 
@@ -89,8 +92,8 @@ working if you are on a laptop with a USB phone.
   real floor. Verified on Android 16 / One UI (SM-F936B); **not tested on anything older.**
 - **A current WebView provider** (Chrome, or Google's standalone WebView). The CDP version
   you get comes from it — this device reports `Chrome/153`, protocol 1.3.
-- Nothing else. No root, no accessibility service, no Shizuku: those are only needed for the
-  optional virtual-display mode. The relay means you never even need adb *after launch*.
+- Nothing else. No root, no Shizuku, no accessibility service. The relay means you never even
+  need adb *after launch*.
 
 ### Termux and the build tools
 
@@ -113,7 +116,7 @@ pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 zip u
 | **packaging** | `zip` | `build.sh` adds `classes.dex` with `zip` — a *separate* package from `unzip` |
 | helper scripts | `python3`, `curl` | used by `cdp-webview.sh` / `display.sh` |
 
-`aidl` is **not** needed here (only pi-trackpad needs it).
+`aidl` is **not** needed here.
 
 ### The platform jar (27 MB, not in this repo)
 
@@ -122,8 +125,8 @@ curl -LO https://dl.google.com/android/repository/platform-36_r02.zip   # HTTP 2
 unzip -j platform-36_r02.zip android-36/android.jar -d sdk/platforms/android-36/
 ```
 
-Sanity check: that jar is ~27,768,000 bytes. `build.sh` also falls back to
-`~/trackpad/sdk/platforms/android-36/android.jar` if you have pi-trackpad checked out.
+Sanity check: that jar is ~27,768,000 bytes. `build.sh` looks for it at
+`sdk/platforms/android-36/android.jar`.
 
 ### Wireless ADB, from Termux on the same device
 
@@ -199,15 +202,146 @@ with two adjustments:
 
 Clone with `gh repo clone` or plain `git clone` (a private repo would also need auth).
 
-### Optional: pi-trackpad (only for the alternate display backend)
 
-The **default** off-screen path (`./display.sh overlay`) needs nothing but adb — see
-*Running it off the phone screen*. [pi-trackpad](https://github.com/jan5o7o/pi-trackpad)
-is only required for the other backend, because a PUBLIC, task-hosting display needs shell
-UID. That means: pi-trackpad installed, (a) its accessibility service enabled and
-(b) Shizuku running and granted (`moe.shizuku.manager.permission.API_V23`). Then
-`./display.sh visible` or `headless` work. Without it you lose only that variant — the
-overlay display and the phone's own screen both still work.
+## A real run, start to finish
+
+This is the whole flow as it actually went on a phone that had never seen this repo — a Galaxy
+Z Fold on Android 16 with Termux installed and nothing else. Output is trimmed, but the
+awkward parts are kept on purpose. Nothing but Termux was installed on it, to prove the flow
+stands on its own.
+
+### 0. What you need before you start (not scriptable)
+
+| | why |
+|---|---|
+| Termux (F-Droid / GitHub releases) | everything below runs inside it |
+| Developer options + **Wireless debugging** on | adb is how the APK gets installed |
+| the **pairing code**, read off the screen | once per device; only a human can see it |
+
+### 1. Get the code
+
+```bash
+gh repo clone jan5o7o/webview-shell && cd webview-shell
+```
+
+### 2. Pre-install checkup (writes nothing)
+
+```bash
+bash ./setup.sh --pre-install-checkup
+```
+
+On this phone it failed — correctly, and usefully:
+
+```
+== android platform jar
+  FAIL  sdk/platforms/android-36/android.jar missing (27 MB platform jar, deliberately not in the repo)
+
+== adb
+  FAIL  no device connected
+        On the phone: Settings → About phone → tap Build number 7× →
+        Developer options → Wireless debugging → on → 'Pair device with pairing code'.
+
+Do this next:
+  1. curl -LO https://dl.google.com/android/repository/platform-36_r02.zip && unzip -j …
+  2. adb pair <ip>:<pair-port>     # once per device; the code is on the Wireless debugging screen
+  3. adb connect <ip>:<connect-port>   # changes every time Wireless debugging is toggled; 127.0.0.1:<port> works on-device
+
+Not ready. Fix the items above, then re-run: bash ./setup.sh --pre-install-checkup
+```
+
+### 3. Fix 1 — the adb connection (the fiddly part)
+
+Everything about this was harder than it should be, in ways worth knowing:
+
+- The phone **changed networks during the session**, so its IP moved `192.168.1.172` →
+  `10.76.185.111` → `192.168.100.20`. The mDNS records went stale with it: the advertised
+  **connect ports were refused** while a different port actually answered.
+- **Pairing and connecting use different ports.** Attempting `adb pair` on the connect port
+  gives `error: protocol fault (couldn't read status message)` — only the pairing port speaks
+  that protocol. And a plain `adb connect` at a port that answers but is not accepting
+  connections leaves an **`offline` transport** rather than a clean error, which looks like a
+  broken device until you clear it (`adb kill-server`, or `adb disconnect <addr>`).
+- `adb mdns services` does **not** work with Termux's `android-tools` build
+  (`error: unknown host service 'mdns:services'`), so a zeroconf client is the way to find the
+  live ports — including `_adb-tls-pairing._tcp`, which is what hands you the pairing port
+  while the dialog is open.
+- Because Termux runs *on* the phone, `127.0.0.1:<port>` reaches adbd and sidesteps the
+  network churn completely.
+
+So, in practice:
+
+```bash
+$ python3 ~/adbdiscover.py                     # or any mDNS/zeroconf client
+FOUND adb-RFCTB158WFJ-hNiWLk._adb-tls-pairing._tcp.local.  ['192.168.100.20', …] 37991
+FOUND adb-RFCTB158WFJ-hNiWLk._adb-tls-connect._tcp.local.  ['192.168.100.20', …] 41373
+FOUND adb-RFCTB158WFJ-hNiWLk (3)._adb-tls-connect…         ['192.168.100.20', …] 40855
+
+$ adb pair 127.0.0.1:37991 460835
+Successfully paired to 127.0.0.1:37991 [guid=adb-RFCTB158WFJ-hNiWLk]
+
+$ adb connect 127.0.0.1:43803                  # the connect port that actually answered
+connected to 127.0.0.1:43803
+
+$ adb devices -l
+127.0.0.1:43803   device product:q4qxxx model:SM_F936B device:q4q
+```
+
+### 4. Fix 2 — the platform jar: do nothing
+
+`setup.sh` fetches it. With no jar anywhere on the device it downloaded the 27 MB archive
+itself and extracted the jar — **27,768,026 bytes**, matching the documented size.
+
+### 5. Build, install, verify
+
+```bash
+bash ./setup.sh
+```
+
+```
+== install
+  warn  signed differently from the installed copy (no keystore is committed) — uninstalling and reinstalling
+  ok    installed (after uninstall)
+  ok    notification permission granted
+
+== launch and verify
+  ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
+  ok    CDP round-trip: document.title = "Pi WebView Shell"
+  ok    input injection: taps 0 → 1
+  warn  screenshot not attempted: page is 'hidden', so there are no frames to capture
+        pixels need a visible window — ./display.sh overlay gives one off-screen
+```
+
+The signature warning is expected on a fresh clone and handled automatically: no signing key is
+committed, so `build.sh` generated one (`CN=Pi WebView`) and Android refused to update the
+app installed from a different key — hence uninstall + reinstall.
+
+The screenshot line is the other real behaviour: the page was **hidden** (its window was not on
+screen), and a hidden page has no frames to capture. It is reported as skipped with the fix
+rather than as a failure. Taking the advice:
+
+### 6. Off-screen, phone-sized, with pixels
+
+```bash
+$ ./display.sh overlay
+display id   41 (overlay, 1080x2340/420 — created via overlay_display_devices)
+task         5334 sized to 1080x2340
+viewport     {"css":"411x851","dpr":2.625,"px":"1079x2234"}
+pixels       YES — renders off-screen; capture at the display size, no clamping
+relay        UP on 127.0.0.1:9334 (no adb forward)
+
+$ node cdp.mjs --shot clone-shot.png
+screenshot -> clone-shot.png            # 1082x2237 PNG
+```
+
+### What that run proves
+
+| | |
+|---|---|
+| root | not needed |
+| Shizuku / accessibility service / any companion app | **not needed** — nothing else was installed |
+| adb after launch | not needed — the relay served CDP throughout |
+| human hands | developer options, the pairing code, and later the display toggle |
+| wall-clock cost | dominated by the 27 MB jar download and the build; the pairing was the only fiddly part |
 
 ## Three layers of control
 
@@ -252,18 +386,19 @@ so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP event
 |---|---|
 | `java/com/pi/webview/MainActivity.java` | debug flag, WebView, `pi` JS bridge (`ping`/`info`/`toast`) |
 | `java/com/pi/webview/KeepAliveService.java` | foreground service — keeps the process out of the frozen cgroup |
-| `java/com/pi/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) — **not yet verified on device** |
+| `java/com/pi/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) |
 | `assets/index.html` | demo page; exposes `window.__pi` as a stable CDP handle |
-| `build.sh` | on-device build (a `-A assets` variant of `~/trackpad/build.sh`) |
+| `build.sh` | on-device build: aapt2 → javac → d8 → alignment check → apksigner |
 | `cdp-webview.sh` | pid discovery, freeze handling, `adb forward`, verification |
 | `cdp.mjs` | dependency-free CDP client/CLI (Node 22+ global `WebSocket`) |
-| `display.sh` | put the shell on a virtual display — headless or surface-backed |
+| `display.sh` | put the shell on a simulated phone-sized display, off-screen |
 
-`keystore.jks` is copied from `~/trackpad` so both APKs share one dev key.
+`keystore.jks` is a throwaway dev key: `build.sh` generates it on first build, and it is never
+committed.
 
 ## Running it off the phone screen (and testing at phone sizes)
 
-Two backends, and **the default one has no pi-trackpad dependency**:
+One backend, and it needs nothing but adb:
 
 ```bash
 ./display.sh overlay                # adb only — a phone-sized simulated display
@@ -273,39 +408,23 @@ Two backends, and **the default one has no pi-trackpad dependency**:
 ./display.sh status                 # what exists, where the app is, is the relay up
 ```
 
-**(a) `overlay` — needs nothing but adb.** `settings put global
-overlay_display_devices "1080x2340/420"` asks system_server to create a simulated
-secondary display; shell holds `WRITE_SECURE_SETTINGS`, so adb can do it. Result: a
-**phone-sized display the WebView fills at 411×851 CSS px / dpr 2.625**, rendering
-off-screen. Screenshots come back at the display's own resolution (1082×2237) with no
-emulation and no clamping.
+`settings put global overlay_display_devices "1080x2340/420"` asks system_server to create a
+simulated secondary display; shell holds `WRITE_SECURE_SETTINGS`, so adb can do it — no root,
+no Shizuku, no accessibility service, no other app. Result: a **phone-sized display the WebView
+fills at 411×851 CSS px / dpr 2.625**, rendering off-screen. Screenshots come back at the
+display's own resolution (1082×2237) with no emulation and no clamping.
 
-**(b) pi-trackpad — optional.** A PUBLIC, task-hosting display otherwise needs
-`ADD_TRUSTED_DISPLAY` / `CAPTURE_VIDEO_OUTPUT`, which normal apps don't hold; that app
-ows one display slot via its Shizuku shell service and `display.sh` drives its
-`vdisplay` script over a broadcast. Use it if you want its headless/visible/surface
-toggling:
+Measured on SM-F936B / Android 16:
 
-```bash
-./display.sh headless      # OFF display, app runs there, no pixels
-./display.sh visible       # surface-backed display: renders
-./display.sh show | hide   # attach/detach that surface (hide = back to no pixels)
-./display.sh phone         # visible + device profile + screenshot
-./display.sh none          # destroy, app back to the phone screen
-```
-
-Measured on SM-F936B / Android 16 — the three are **not** interchangeable:
-
-| | `overlay` (adb) | trackpad visible | trackpad headless |
-|---|---|---|---|
-| JS / DOM / network / timers | yes | yes | yes |
-| CDP input injection (`--click`, `--type`) | yes | yes | yes |
-| the relay (no adb) | yes | yes | yes |
-| `document.visibilityState` | `visible` | `visible` | `hidden` |
-| `requestAnimationFrame` | runs | runs (~84/700 ms) | **never fires** (0/800 ms) |
-| `Page.captureScreenshot` | works, **native size** | works, float surface | **times out** |
-| phone-sized natively | yes (1080×2340) | no (1245×1397) | n/a |
-| needs pi-trackpad + Shizuku | **no** | yes | yes |
+| | |
+|---|---|
+| JS / DOM / network / timers | yes |
+| CDP input injection (`--click`, `--type`) | yes |
+| the relay (no adb after launch) | yes |
+| `document.visibilityState` | `visible` |
+| `requestAnimationFrame` | runs |
+| `Page.captureScreenshot` | works, at the display's own size |
+| phone-sized natively | yes (1080×2340 as configured) |
 
 ### Two traps in the adb backend, both found the hard way
 
@@ -358,8 +477,7 @@ tiling deliberately.
 
 That is exactly why (1) matters: on the default 1080×2340 display a 1170×2532 viewport does
 not fit, so iPhone-14 gets clamped to 2x (780×1688). Sizing the display to 1200×2700 lets the
-full 3x viewport through at native resolution. Same rule applies to the pi-trackpad float
-surface, which is only 1245×1397 — retina captures are not possible there.
+full 3x viewport through at native resolution.
 
 Captures are always `Page.captureScreenshot`, never `screencap`: simulated displays are not
 in `screencap`'s list (it only sees the physical ones — 904×2316 cover, 1812×2176 inner).
@@ -370,7 +488,6 @@ Measured, unusual, and worth knowing before you wonder why something is still ru
 
 ```bash
 ./display.sh overlay-off                  # delete the persisted setting, app back to the phone
-./display.sh none                         # destroy pi-trackpad's display, if you used it
 ./cdp-webview.sh down                     # remove the 9333 adb forward, if you used that path
 adb shell am force-stop com.pi.webview    # only this stops the app itself
 ```
@@ -388,8 +505,7 @@ adb shell am force-stop com.pi.webview    # only this stops the app itself
 - **The `overlay_display_devices` setting is persisted.** `overlay-off` deletes it; until then
   the simulated display is recreated after a reboot.
 - The relay port is released when the process dies. Nothing else on the device is modified by
-  any of this — no system settings besides that one, and pi-trackpad's display slot is simply
-  freed.
+  any of this — that setting is the only one touched.
 
 ## The freeze problem (the thing that actually bites)
 
@@ -496,8 +612,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 ## Not done yet (deliberately)
 
 - No overlay/floating variant — this is an Activity. A `TYPE_ACCESSIBILITY_OVERLAY`
-  WebView is the `~/trackpad` direction and needs a display context for DeX plus
-  care with the click-through trick.
+  WebView would need a display context for DeX, and care with the click-through trick.
 - Multiple simultaneous CDP *clients* on one target are untested (multiple targets
   definitely coexist; that is a different question).
 
@@ -505,13 +620,3 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 - The `overlay_display_devices` backend is a **persisted global setting**: it survives a
   reboot until you clear it with `./display.sh overlay-off`.
-- A pi-trackpad **surface-backed** display only produces pixels while its surface is
-  attached: `vdisplay show` (and the phone screen on). `hide`, or the screen going off,
-  returns you to the headless situation with the apps still running.
-- `display.sh headless|visible|…` needs **pi-trackpad running, its accessibility service
-  enabled, and Shizuku granted**; `display.sh` reports whatever it gets back. The
-  `overlay` backend needs none of that.
-- pi-trackpad requests 1920×1080 for its display, but the surface-backed size follows its
-  float window (1245×1397) — which is why retina captures need the overlay backend, or a
-  rebuild of that app with w/h/dpi plumbed through its `VDisplayReceiver` (its AIDL already
-  takes them).
