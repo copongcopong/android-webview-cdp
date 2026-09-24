@@ -85,7 +85,7 @@ secondary display. Phone-sized by construction — 1080×2340/420 gives the shel
 at dpr 2.625 — and it renders off-screen at native resolution. No root, no Shizuku, no
 accessibility service, no other app.
 
-Four things that will bite:
+Six things that will bite:
 
 - **`settings put global overlay_display_devices ""` fails** (`Bad arguments`). Clear with
   `settings delete global overlay_display_devices` — what `overlay-off` runs. The setting
@@ -96,6 +96,18 @@ Four things that will bite:
   activity *moves* the task: it keeps the old window size and carries the previous display's
   density, so you get 480×993 CSS at dpr 2.25 instead of 411×851 at 2.625. Launch fresh, then
   `am task resize <taskId> 0 0 <w> <h>`.
+- **Screenshots need a surface.** The window must be on a display that is ON and *has a render
+  target*. A surface-less display (headless, `state=OFF`) produces no frames by any route — all
+  four capture APIs fail (`captureScreenshot` default / `fromSurface:false` /
+  `captureBeyondViewport:true` time out, `startScreencast` yields 0 frames) — and a `hidden`
+  page behaves the same way. JS, DOM, network, timers and CDP input injection still work there,
+  so a surface-less display is for logic/DOM/network assertions only.
+  `overlay_display_devices` always renders, so this path always has pixels.
+- **Window sizing, not the display, is the device-specific part.** This device ships freeform
+  window management, so a task on a secondary display can arrive small and *keeps its bounds*
+  when it moves displays — which is why `overlay` force-stops and then resizes unconditionally.
+  On a non-DeX phone expect fullscreen and a no-op resize; `--windowingMode 1` is the knob if a
+  device does not fill. (Inferred — never measured on a non-DeX device.)
 - **`screencap` cannot see simulated displays** — `-a` lists only physical ones, `-d` takes
   the SurfaceFlinger token and rejects a virtual display's. Capture with CDP `--shot`.
 

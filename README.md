@@ -441,6 +441,77 @@ Measured on SM-F936B / Android 16:
 | `Page.captureScreenshot` | works, at the display's own size |
 | phone-sized natively | yes (1080×2340 as configured) |
 
+### What a screenshot actually requires
+
+One requirement, and nothing else matters: **the WebView's window must be on a display that is
+ON and has a surface.** A capture is just "hand me the last composited frame" — no surface, no
+frame, no screenshot. Read the dependencies that way:
+
+| capability | needs | does *not* need |
+|---|---|---|
+| app installed and running | **adb** (`install`, `am start`) | — |
+| a second display at all | **adb only** — the `overlay_display_devices` setting (shell holds `WRITE_SECURE_SETTINGS`) | root, Shizuku, accessibility service, a companion app, a physical second screen |
+| screenshotting it over CDP | the above, plus a display that renders (surface + ON), plus a window that actually fills it | CDP emulation — `--device` is optional, the display is phone-sized by construction |
+| reaching CDP to take one | the relay on `127.0.0.1:9334` | any adb forward |
+
+So the minimum is three commands, and only the first two need adb:
+
+```bash
+adb install -r out/pi-webview.apk
+./display.sh overlay              # settings put + force-stop + am start --display + task resize
+node cdp.mjs --shot shot.png      # 1082×2237, over the relay, zero adb
+```
+
+**No surface means no pixels.** A display created without a render target — a "headless" virtual
+display, `state=OFF` — hosts and runs the app, but there is nothing to composite into, so every
+capture route fails. Measured, all four:
+
+| route | result |
+|---|---|
+| `Page.captureScreenshot` | times out |
+| `Page.captureScreenshot` `fromSurface:false` | times out |
+| `Page.captureScreenshot` `captureBeyondViewport:true` | times out |
+| `Page.startScreencast` | 0 frames in 3 s |
+
+The page there also reports `visibilityState: "hidden"` and `requestAnimationFrame` never fires —
+though JS, DOM, network, **timers** and **CDP input injection** all still work, because CDP input
+is injected browser-side rather than as Android input. That makes a surface-less display good for
+logic/DOM/network assertions and useless for anything visual. `overlay_display_devices` has no
+"don't render" option, so the adb-only path documented here always has a surface.
+
+The same rule bites more subtly: **a `hidden` page has no frames either.** That happens when the
+window stops rendering — screen off, or the activity stopped — even though the display exists.
+`setup.sh` reports it as *skipped, here's the fix* rather than as a failure, for exactly this
+reason. If you need pixels, `./display.sh overlay` is the answer to that warning.
+
+### On devices without DeX
+
+Nothing in the mechanism is DeX-specific: the simulated display is AOSP, and shell can write that
+setting on any Android 14+ device. What varies between devices is **window management on
+secondary displays** — which is the only reason `display.sh` force-stops and resizes.
+
+Every measurement in this README is from an SM-F936B, which ships freeform window management, so a
+task can land in a small window and keep its bounds when it moves between displays. That is what
+the force-stop and the unconditional `am task resize` exist to handle.
+
+| | freeform-capable (measured here) | typical non-DeX phone (**inferred**) |
+|---|---|---|
+| simulated display | works | works — same AOSP mechanism |
+| window on it | may arrive small/freeform | should arrive fullscreen — no freeform to land in |
+| `am task resize` | sometimes needed | usually a no-op: freeform is disabled, the call fails and is ignored (`\|\| true`) |
+| screenshots | 1082×2237 verified | expected identical — surface + ON is the whole requirement |
+| the phone's own screen | fullscreen (measured) | fullscreen |
+
+If a device does not fill the display, the knob is an explicit fullscreen launch:
+
+```bash
+adb shell am start --display <id> --windowingMode 1 -f 0x10000000 -n com.pi.webview/.MainActivity
+```
+
+and if it refuses the simulated display entirely, falling back to its own screen keeps everything
+except the off-screen property. **The non-DeX column has not been run on a non-DeX phone** — it is
+reasoning from the mechanism plus the flags checked on this one.
+
 ### Two traps in the adb backend, both found the hard way
 
 - **`settings put global overlay_display_devices ""` fails** with `Bad arguments`.
@@ -589,6 +660,11 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   something injects or taps it.
 - **Relay works with no adb**: `adb forward --list` empty, CDP answering on
   `127.0.0.1:9334`.
+- **Capture depends on a surface, and nothing else.** On a surface-less (`state=OFF`) display
+  every route fails — `captureScreenshot` (default, `fromSurface:false`,
+  `captureBeyondViewport:true`) times out and `startScreencast` yields 0 frames — while JS, DOM,
+  network, timers and input injection all still work. On the `overlay_display_devices` display,
+  with the same app and the same commands, capture works at 1082×2237.
 - **Multi-display**: launched on display **17** (XREAL One, 1920×1080, density 213)
   and display **24** (a virtual display, 1245×1397, density 360 → dpr 2.25). On each,
   CDP read the viewport and `Input.dispatchMouseEvent` clicked the button.
@@ -615,6 +691,9 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   the *cover* screen otherwise). It also refuses the virtual display's token as
   "not valid", and `-a` only enumerates active *physical* displays. To see a WebView
   on an unusual display, capture through CDP (`--shot`) instead.
+- **No surface, or a `hidden` page, means no pixels.** A display without a render target, or a
+  window that has stopped rendering, produces no frames — every capture route times out. See
+  *What a screenshot actually requires*.
 - **A backgrounded app cannot show a Toast** (Android 11+). `pi.toast()` still
   executes Java, but nothing appears unless the app is foreground or holds
   `SYSTEM_ALERT_WINDOW`.
