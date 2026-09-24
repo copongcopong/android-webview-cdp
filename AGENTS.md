@@ -83,6 +83,16 @@ A headless (`state=OFF`) pi-trackpad display gives no pixels at all (`visibility
 and **CDP input injection** all still work, because CDP input is injected browser-side rather
 than as Android input.
 
+### Stopping
+
+- `display.sh overlay-off` / `display.sh none` close the displays; `cdp-webview.sh down`
+  removes the adb forward. **None of them stop the app.**
+- **A dead Activity with a live process is expected**: `KeepAliveService` outlives the
+  Activity, so the FGS notification stays and the relay keeps listening on 9334. `status`
+  showing `relay UP` with an empty `app display` is correct, not a bug — don't "fix" it by
+  tying the relay to the Activity lifecycle.
+- Only `adb shell am force-stop com.pi.webview` stops everything (process, notification, port).
+
 ## Known behaviours / gotchas
 
 - `aapt2 link` needs `-A assets`, or the HTML silently isn't in the APK.

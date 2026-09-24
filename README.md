@@ -289,6 +289,33 @@ surface, which is only 1245×1397 — retina captures are not possible there.
 Captures are always `Page.captureScreenshot`, never `screencap`: simulated displays are not
 in `screencap`'s list (it only sees the physical ones — 904×2316 cover, 1812×2176 inner).
 
+## Stopping it — and what lingers
+
+Measured, unusual, and worth knowing before you wonder why something is still running:
+
+```bash
+./display.sh overlay-off                  # delete the persisted setting, app back to the phone
+./display.sh none                         # destroy pi-trackpad's display, if you used it
+./cdp-webview.sh down                     # remove the 9333 adb forward, if you used that path
+adb shell am force-stop com.pi.webview    # only this stops the app itself
+```
+
+- **Closing the display does not stop the app.** Destroy the display and the Activity goes
+  with it, but `KeepAliveService` (the foreground service that makes the process
+  freeze-exempt) outlives it — so the "Pi WebView Shell" notification stays up and the relay
+  keeps listening on `127.0.0.1:9334`. That is by design, not a leak; it is what lets you
+  drive the shell while it is not the visible app. `status` will show a live `relay UP` with
+  `app display` empty — that combination is expected.
+- **Only `force-stop` is a real stop**: it takes the process, the notification and the
+  listening port with it.
+- **An idle relay is not exposed**: the port binds `127.0.0.1` only, so nothing off-device
+  can reach it (other apps on the phone could — see the gotchas).
+- **The `overlay_display_devices` setting is persisted.** `overlay-off` deletes it; until then
+  the simulated display is recreated after a reboot.
+- The relay port is released when the process dies. Nothing else on the device is modified by
+  any of this — no system settings besides that one, and pi-trackpad's display slot is simply
+  freed.
+
 ## The freeze problem (the thing that actually bites)
 
 An Android app that is not the visible app gets **frozen** — its whole cgroup is
