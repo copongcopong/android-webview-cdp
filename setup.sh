@@ -129,7 +129,9 @@ fi
 
 # ---------------------------------------------------------------- 4. adb
 step "adb"
-if ! command -v "${ADB%% *}" >/dev/null 2>&1; then
+if [ "$MODE" = build ]; then
+    info "not needed for --build (skipped)"
+elif ! command -v "${ADB%% *}" >/dev/null 2>&1; then
     bad "${ADB%% *} not on PATH"
     fix "pkg install android-tools"
 elif "$ADB" devices 2>/dev/null | awk 'NR>1 && $2=="device"' | grep -q .; then
