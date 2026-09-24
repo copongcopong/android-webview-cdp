@@ -56,8 +56,8 @@ with no adb forward:
 
 ```bash
 # 1. Termux (required) — from F-Droid or GitHub releases, not the Play Store
-# 2. get the code (private repo)
-gh repo clone jan5o7o/webview-shell && cd webview-shell
+# 2. get the code
+gh repo clone jan5o7o/webview-shell && cd webview-shell   # or: git clone https://github.com/jan5o7o/webview-shell.git
 # 3. READ-ONLY checkup: prints what is missing and the exact command to fix each item
 bash ./setup.sh --pre-install-checkup
 # 4. do what it says, then build + install + verify in one pass
@@ -197,7 +197,7 @@ with two adjustments:
   DevTools handshake). `display.sh overlay` also works from off-device — it is only `adb`
   writing a setting.
 
-Note the repo is **private**: cloning needs `gh` auth or a token.
+Clone with `gh repo clone` or plain `git clone` (a private repo would also need auth).
 
 ### Optional: pi-trackpad (only for the alternate display backend)
 

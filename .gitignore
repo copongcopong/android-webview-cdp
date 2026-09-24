@@ -11,5 +11,8 @@ sdk/
 # misc
 *.apk
 __pycache__/
+# setup.sh downloads this to extract android.jar; it must never be committed
+platform-*_r*.zip
+android-36/
 # throwaway captures at the repo root — docs/img/** is tracked on purpose
 /*.png
