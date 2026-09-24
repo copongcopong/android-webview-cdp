@@ -1,6 +1,6 @@
 # Pi WebView Shell
 
-A 16 KB single-Activity Android app that hosts a **WebView you can drive over the
+A 20 KB single-Activity Android app that hosts a **WebView you can drive over the
 Chrome DevTools Protocol from Termux** — plus the Termux-side tooling to do it.
 Built on-device, no Gradle, no Android SDK — a hand-rolled `build.sh`
 (aapt2 → javac → d8 → apksigner).
@@ -101,26 +101,51 @@ working if you are on a laptop with a USB phone.
 - Nothing else. No root, no Shizuku, no accessibility service. The relay means you never even
   need adb *after launch*.
 
-### Termux and the build tools
+### Termux — which build, and what it must have
 
-Install **Termux from F-Droid or GitHub releases** — the Play Store build is deprecated and stale.
+**Which build.** [F-Droid](https://f-droid.org/packages/com.termux/) or the
+[GitHub releases](https://github.com/termux/termux-app/releases). **Not the Play Store build:**
+it is deprecated, its package repository is not the one these packages come from, and it cannot be
+upgraded in place — uninstall it first if you have it. The tell is `pkg` itself: if `pkg update`
+complains or `pkg install aapt2` finds nothing, that is the build you are on.
+
+**What it must have.** Nothing. No add-on apps, no permissions, no root:
+
+| commonly installed | needed? | why |
+|---|---|---|
+| Termux:API, Termux:Boot, Termux:Widget | **no** | no `termux-*` command is used. `setup.sh` checks that `termux-setup-storage` *exists*, only to confirm it is running in Termux — it never runs it, so you are never asked for storage access |
+| storage permission | **no** | nothing outside the repo and `$HOME` is written; the platform jar unpacks into `sdk/` |
+| root, `sudo`, proot-distro, X11 | **no** | the build is a plain userspace toolchain |
+| a particular Termux version | **no** | any current build provides bash 5 and the packages below |
+
+Two floors worth not confusing: Termux itself supports considerably older Android than this app
+requires, so *having Termux* tells you nothing about the **Android 14+** device requirement above.
+
+**Where it all runs.** Everything — the build, adb, the CDP client — runs *inside Termux on the
+phone*, including Termux's own **adb server**. That is what makes the `127.0.0.1:<port>` shortcuts
+work, and why killing Termux takes the adb connection and any forwards with it.
+
+### Packages
 
 ```bash
 pkg update && pkg upgrade
-pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 zip unzip curl
+pkg install aapt2 d8 apksigner openjdk-21 python3 zip android-tools nodejs-lts unzip curl
 ```
 
-| need | package | provides |
+Split by what actually needs them — the second group is only needed to *drive* it:
+
+| needed for | package | provides |
 |---|---|---|
-| resource/manifest compiler | `aapt2` | `aapt2` |
-| dexer | `d8` | `d8` |
-| signing | `apksigner` | `apksigner` |
-| javac / keytool | `openjdk-21` | `javac`, `keytool` (21.0.12 here) |
-| adb | `android-tools` | `adb` 1.0.41 / 35.0.2 |
-| CDP client | `nodejs-lts` | `node` (needs **22+** for the built-in `WebSocket`) |
-| jar extraction | `unzip` | `unzip` |
-| **packaging** | `zip` | `build.sh` adds `classes.dex` with `zip` — a *separate* package from `unzip` |
-| helper scripts | `python3`, `curl` | used by `cdp-webview.sh` / `display.sh` |
+| **the build**: `./build.sh` | `aapt2` | resource + manifest compiler |
+| | `d8` | dexer |
+| | `apksigner` | signing |
+| | `openjdk-21` | `javac` and `keytool` (21.0.12 here) |
+| | `zip` | packaging — `build.sh` adds `classes.dex` with `zip`, a *separate* package from `unzip` |
+| | `python3` | the alignment check inside `build.sh` — build-critical, not a helper |
+| **installing and driving** | `android-tools` | `adb` 1.0.41 / 35.0.2 |
+| | `nodejs-lts` | `node` — needs **22+** for the built-in `WebSocket` that `cdp.mjs` uses |
+| | `curl` | the relay/HTTP checks in the scripts |
+| | `unzip` | extracting the platform jar |
 
 `aidl` is **not** needed here.
 
@@ -233,7 +258,7 @@ stands on its own.
 
 | | why |
 |---|---|
-| Termux (F-Droid / GitHub releases) | everything below runs inside it |
+| Termux (F-Droid / GitHub releases — **not** the Play Store build) | everything below runs inside it |
 | Developer options + **Wireless debugging** on | adb is how the APK gets installed |
 | the **pairing code**, read off the screen | once per device; only a human can see it |
 
@@ -385,13 +410,9 @@ one: you can point the same tooling at any WebView/Chrome.
 
 ```bash
 cd ~/webview-shell
-./build.sh                                  # aapt2 -> javac -> d8 -> check -> apksigner
+./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
 adb install -r out/pi-webview.apk
-
-./cdp-webview.sh up                         # (re)launch + unfreeze + forward + verify
-./cdp-webview.sh status                     # pid, frozen?, forward, HTTP
-./cdp-webview.sh info                       # page targets
-./cdp-webview.sh down                       # remove the forward
+adb shell am start -n com.pi.webview/.MainActivity   # ← starts the relay
 
 node cdp.mjs 'document.title'               # evaluate in the page
 node cdp.mjs --click 'button'               # real mouse input (or --click 'text=tap me')
@@ -406,6 +427,12 @@ node cdp.mjs 'pi.info()'                    # cross into the Android layer
 
 Actions run in a fixed order (`nav → wait → click → type → key → expression → shot`),
 so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP events.
+
+**Nothing above touches adb after `am start`.** The app publishes its own DevTools socket on
+`127.0.0.1:9334` (`RelayServer`), so the client talks straight to it. The other transport is an
+`adb forward`, driven by `./cdp-webview.sh up | direct | status | info | down`, which you need
+when you want a port without the app's relay running, or from a laptop — the two are compared in
+*Two ways to get a port*.
 
 ## Files
 
