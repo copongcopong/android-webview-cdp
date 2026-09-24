@@ -11,7 +11,12 @@
 //   node cdp.mjs --nav https://example.com  navigate + wait for load
 //   node cdp.mjs --wait '#ready'            poll for a selector
 //   node cdp.mjs --shot page.png            screenshot the page
-//   node cdp.mjs --repl                     interactive session (.help for meta commands)
+//   node cdp.mjs --device pixel-7                emulate a common phone viewport
+//                                                (scale factor is clamped to the display surface)
+//   node cdp.mjs --list-devices                  available device profiles
+//   node cdp.mjs --metrics 412x915x2.625         custom viewport (CSS px x dsf)
+//   node cdp.mjs --reset-device                  drop the override
+//   node cdp.mjs --repl                          interactive session (.help for meta commands)
 //
 //   PORT=9334 node cdp.mjs …                pin the endpoint (default: try 9334, then 9333)
 //   DEBUG=1 node cdp.mjs …                  also stream CDP events (console, loads, …)
@@ -35,11 +40,34 @@ const opt = { rest: [] };
 const KEY_FLAGS = {
   '--click': 'click', '--type': 'type', '--key': 'key', '--nav': 'nav',
   '--wait': 'wait', '--shot': 'shot', '--screenshot': 'shot', '--target': 'target',
+  '--device': 'device', '--metrics': 'metrics',
+};
+
+// CSS px + deviceScaleFactor. These describe the *test viewport*, independent of the
+// physical display: the headless/floating virtual display only has to be big enough.
+const DEVICES = {
+  'iphone-se': { w: 375, h: 667, dsf: 2, ua: 'iphone' },
+  'iphone-14': { w: 390, h: 844, dsf: 3, ua: 'iphone' },
+  'iphone-15-pro': { w: 393, h: 852, dsf: 3, ua: 'iphone' },
+  'pixel-7': { w: 412, h: 915, dsf: 2.625, ua: 'android' },
+  'pixel-8-pro': { w: 448, h: 998, dsf: 2.625, ua: 'android' },
+  'galaxy-s23': { w: 360, h: 780, dsf: 3, ua: 'android' },
+  'galaxy-s24-ultra': { w: 384, h: 824, dsf: 3.5, ua: 'android' },
+  'zfold-inner': { w: 805, h: 967, dsf: 2.25, ua: 'android' },   // this device, unfolded
+  'ipad-mini': { w: 744, h: 1133, dsf: 2, ua: 'ipad' },
+};
+const UAS = {
+  android: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36',
+  iphone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1',
+  ipad: 'Mozilla/5.0 (iPad; CPU OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1',
 };
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--repl') opt.repl = true;
   else if (a === '--list') opt.list = true;
+  else if (a === '--list-devices') opt.listDevices = true;
+  else if (a === '--reset-device') opt.resetDevice = true;
+  else if (a === '--no-clamp') opt.noClamp = true;
   else if (a === '-h' || a === '--help') opt.help = true;
   else if (KEY_FLAGS[a]) opt[KEY_FLAGS[a]] = argv[++i];
   else if (a.startsWith('--')) { console.error(`unknown flag: ${a}`); process.exit(2); }
@@ -48,6 +76,29 @@ for (let i = 0; i < argv.length; i++) {
 const expression = opt.rest.join(' ');
 // Console output is the interesting part of a REPL session, noise for one-shots.
 const STREAM_CONSOLE = !!(opt.repl || process.env.DEBUG);
+
+if (opt.listDevices) {
+  for (const [name, d] of Object.entries(DEVICES)) {
+    console.log(`${name.padEnd(18)} ${String(d.w).padStart(4)}x${String(d.h).padEnd(5)} @${d.dsf}x  mobile  ${d.ua}`);
+  }
+  process.exit(0);
+}
+
+/** Returns the profile to apply, or null. */
+function deviceProfile() {
+  if (opt.resetDevice) return null;
+  if (opt.metrics) {
+    const m = /^(\d+)x(\d+)(?:x([\d.]+))?$/.exec(opt.metrics);
+    if (!m) throw new Error('--metrics wants WxH or WxHxDSF, e.g. 412x915x2.625');
+    return { w: +m[1], h: +m[2], dsf: m[3] ? +m[3] : 1, ua: 'android' };
+  }
+  if (opt.device) {
+    const d = DEVICES[opt.device];
+    if (!d) throw new Error(`unknown device '${opt.device}' — try --list-devices`);
+    return d;
+  }
+  return null;
+}
 
 if (opt.help) {
   console.log(await (await import('node:fs')).promises.readFile(new URL(import.meta.url), 'utf8')
@@ -223,6 +274,44 @@ async function navigate(c, url) {
   console.log(`navigated -> ${await evaluate(c, 'location.href')}`);
 }
 
+async function applyDevice(c, d) {
+  if (opt.resetDevice) {
+    await c.send('Emulation.clearDeviceMetricsOverride').catch(() => {});
+    await c.send('Emulation.setTouchEmulationEnabled', { enabled: false }).catch(() => {});
+    await c.send('Emulation.setUserAgentOverride', { userAgent: '' }).catch(() => {});
+    console.log('device emulation: cleared');
+    return;
+  }
+  if (!d) return;
+
+  // The Android WebView composites into its window's surface, so the emulated
+  // *device-pixel* size has to fit inside that surface. If it does not,
+  // Page.captureScreenshot still returns an image of the requested size — but the
+  // compositor repeats the visible content to fill it (the page appears twice).
+  // So clamp the scale factor rather than hand back a plausible-looking lie.
+  const surf = JSON.parse(await evaluate(c, 'JSON.stringify({w:Math.round(screen.width*devicePixelRatio),h:Math.round(screen.height*devicePixelRatio)})'));
+  let dsf = d.dsf;
+  const maxDsf = Math.min(surf.w / d.w, surf.h / d.h);
+  if (!opt.noClamp && dsf > maxDsf) {
+    // prefer a recognisable scale factor over "as big as possible"
+    const ladder = [3, 2.625, 2, 1.5, 1];
+    dsf = ladder.find((s) => s <= maxDsf) ?? Math.max(0.5, Math.floor(maxDsf * 100) / 100);
+    console.error(`! display surface is only ${surf.w}x${surf.h} px, but ${d.w}x${d.h} CSS @${d.dsf}x needs ${Math.round(d.w * d.dsf)}x${Math.round(d.h * d.dsf)} px.`);
+    console.error(`  clamping dsf ${d.dsf} -> ${dsf} (→ ${Math.round(d.w * dsf)}x${Math.round(d.h * dsf)} px); beyond the surface, screenshots repeat the page.`);
+    console.error(`  override with --no-clamp, or --metrics ${d.w}x${d.h}x${dsf} to pin this deliberately.`);
+  }
+  if (dsf < 1) console.error(`! dsf ${dsf} < 1: even this may not fit (${Math.round(d.w * dsf)}x${Math.round(d.h * dsf)} px)`);
+
+  await c.send('Emulation.setDeviceMetricsOverride', {
+    width: d.w, height: d.h, deviceScaleFactor: dsf, mobile: true,
+    screenWidth: d.w, screenHeight: d.h, screenOrientation: { type: 'portraitPrimary', angle: 0 },
+  });
+  await c.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await c.send('Emulation.setUserAgentOverride', { userAgent: UAS[d.ua] });
+  const got = await evaluate(c, 'JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio})');
+  console.log(`device: ${opt.device || opt.metrics} -> ${got}  (surface ${surf.w}x${surf.h})`);
+}
+
 async function shot(c, file) {
   const { data } = await c.send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(file, Buffer.from(data, 'base64'));
@@ -247,6 +336,9 @@ await c.send('Log.enable').catch(() => {});
 // let the buffered console replay finish before live streaming starts
 await new Promise((r) => setTimeout(r, 250));
 c.endReplay();
+
+const profile = deviceProfile();
+await applyDevice(c, profile);
 
 async function runOnce() {
   if (opt.nav) await navigate(c, opt.nav);

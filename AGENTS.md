@@ -30,7 +30,8 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
 | `assets/index.html` | demo page; exposes `window.__pi` as a stable CDP handle |
 | `build.sh` | the hand-rolled build pipeline |
 | `cdp-webview.sh` | `up` / `direct` / `status` / `info` / `down` |
-| `cdp.mjs` | dependency-free CDP client (Node 22+ global `WebSocket`) |
+| `cdp.mjs` | dependency-free CDP client (Node 22+ global `WebSocket`), incl. `--device` profiles |
+| `display.sh` | drives pi-trackpad's `vdisplay` to run this app on a virtual display |
 
 ### Two mechanisms worth understanding before changing anything
 
@@ -66,6 +67,13 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
 - `Target.createTarget` / `/json/new` are blocked on Android; attach to an existing target.
 - `screencap -d` wants the SurfaceFlinger token (not the display id), defaults to the
   cover screen, and cannot capture virtual displays — capture via CDP `--shot` instead.
+- **A headless (`state=OFF`) display gives no pixels**: `visibilityState` is `hidden`,
+  `requestAnimationFrame` never fires, and `Page.captureScreenshot` times out. JS, DOM,
+  network, timers and CDP input injection all still work. For anything visual use the
+  surface-backed display (`display.sh visible`, and `show` to attach the surface).
+- **Emulated device pixels must fit the display surface.** Beyond it,
+  `captureScreenshot` returns the requested size with the page drawn twice.
+  `cdp.mjs` clamps the scale factor to 3 / 2.625 / 2 / 1.5 / 1 accordingly.
 
 ## Verification status
 

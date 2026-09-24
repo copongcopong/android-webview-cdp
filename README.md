@@ -74,8 +74,67 @@ so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP event
 | `build.sh` | on-device build (a `-A assets` variant of `~/trackpad/build.sh`) |
 | `cdp-webview.sh` | pid discovery, freeze handling, `adb forward`, verification |
 | `cdp.mjs` | dependency-free CDP client/CLI (Node 22+ global `WebSocket`) |
+| `display.sh` | put the shell on a virtual display — headless or surface-backed |
 
 `keystore.jks` is copied from `~/trackpad` so both APKs share one dev key.
+
+## Running it on a virtual display (and testing at phone sizes)
+
+Display creation is **not** done here: a PUBLIC task-hosting display needs
+`ADD_TRUSTED_DISPLAY` / `CAPTURE_VIDEO_OUTPUT`, which normal apps don't hold. That
+machinery lives in **pi-trackpad** (`~/trackpad`), which owns one virtual-display slot
+via its Shizuku shell service. `display.sh` drives its `vdisplay` script over a
+broadcast and launches this app onto the result.
+
+```bash
+./display.sh status        # what exists, where the app is, is the relay up
+./display.sh headless      # OFF display, app runs there, no pixels
+./display.sh visible       # surface-backed display: renders
+./display.sh show | hide   # attach/detach that surface (hide = back to no pixels)
+./display.sh phone         # visible + device profile + screenshot
+./display.sh none          # destroy, app back to the phone screen
+```
+
+The two kinds are **not** interchangeable — measured on SM-F936B / Android 16:
+
+| | headless (state OFF) | visible (surface-backed) |
+|---|---|---|
+| JS / DOM / network / timers | yes | yes |
+| CDP input injection (`--click`, `--type`) | yes | yes |
+| the relay (no adb) | yes | yes |
+| `document.visibilityState` | `hidden` | `visible` |
+| `requestAnimationFrame` | **never fires** (0 frames in 800 ms) | runs (~84 frames / 700 ms) |
+| `Page.captureScreenshot` | **times out** | works |
+| good for | logic, DOM, network, a background browser | anything visual |
+
+### Phone-sized viewports
+
+The display's own size is pi-trackpad's (the surface-backed one is 1245×1397 px).
+Don't fight it — set the **test viewport** with CDP device emulation:
+
+```bash
+node cdp.mjs --list-devices
+node cdp.mjs --device pixel-7 --nav https://example.com --wait h1 --shot shot.png
+node cdp.mjs --device iphone-14 'JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio})'
+node cdp.mjs --metrics 412x915x2.625 …     # custom; --reset-device to clear
+```
+
+The page then sees an exact phone viewport (e.g. `412x915 @2.625`, touch enabled,
+mobile UA) whatever the physical display is.
+
+**One trap, caught by looking at the output instead of trusting the file size:** the
+WebView composites into its window's surface, so the emulated *device-pixel* size must
+fit inside that surface. `--device iphone-14` (390×844 @3x = 1170×2532 px) does **not**
+fit 1397 px, and `captureScreenshot` still returns a 1170×2532 PNG — with **the page
+drawn twice**. `cdp.mjs` therefore clamps the scale factor to the largest standard value
+(3, 2.625, 2, 1.5, 1) that fits, and says so on stderr: iPhone-14 becomes 1.5x →
+585×1266. `--no-clamp` reproduces the tiling deliberately.
+
+Consequence: on this device a **retina phone-sized screenshot is not achievable** —
+neither the float surface (1245×1397) nor the phone's own screen (1812×2176) is tall
+enough for 1170×2532. CSS layout is exact regardless (which is what layout tests care
+about); for pixel-perfect retina captures, drive **real Chrome** over CDP (~9222 built),
+which composites off-screen at any size.
 
 ## The freeze problem (the thing that actually bites)
 
@@ -186,3 +245,15 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   care with the click-through trick.
 - Multiple simultaneous CDP *clients* on one target are untested (multiple targets
   definitely coexist; that is a different question).
+
+## Environment notes
+
+- A **surface-backed** display only produces pixels while its surface is attached:
+  `vdisplay show` (and the phone screen on). `hide`, or the screen going off, returns
+  you to the headless situation with the apps still running.
+- Virtual-display creation requires **pi-trackpad running, its accessibility service
+  enabled, and Shizuku granted**; `display.sh` reports whatever it gets back.
+- pi-trackpad requests 1920×1080 for the display, but the surface-backed size follows
+  its float window (1245×1397). Making the *display itself* phone-shaped would mean
+  adding w/h/dpi to pi-trackpad's `VDisplayReceiver` + `TrackpadService` (its AIDL
+  already takes them) — not done here, because that needs rebuilding that app.
