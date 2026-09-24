@@ -125,19 +125,15 @@ overlay() {
     for _ in $(seq 1 30); do relay_up && break; sleep 0.5; done
 
     if [ -n "${task:-}" ]; then
-        px="$(node cdp.mjs 'Math.round(innerWidth*devicePixelRatio)' 2>/dev/null | tail -1 || true)"
-        if [ "${px:-0}" -lt "$((w - 8))" ] 2>/dev/null; then
-            # safety net: only when the window did not come up full-width
-            $ADB shell am task resize "$task" 0 0 "$w" "$h" >/dev/null 2>&1 || true
-            sleep 2
-            printf 'task         %s resized to %sx%s (window came up %s px wide)\n' "$task" "$w" "$h" "$px"
-        else
-            printf 'task         %s fills the display (%s px wide)\n' "$task" "$px"
-        fi
+        # Always resize (idempotent): a task keeps its bounds when the display changes,
+        # so a window can come up *larger* than the new display — not just smaller.
+        $ADB shell am task resize "$task" 0 0 "$w" "$h" >/dev/null 2>&1 || true
+        sleep 2
+        printf 'task         %s sized to %sx%s\n' "$task" "$w" "$h"
     else
         printf 'task         not found on display %s — is the app installed?\n' "$id" >&2
     fi
-    vp="$(node cdp.mjs 'JSON.stringify({css:innerWidth+"x"+innerHeight,dpr:devicePixelRatio})' 2>/dev/null | tail -1 || true)"
+    vp="$(node cdp.mjs 'JSON.stringify({css:innerWidth+"x"+innerHeight,dpr:devicePixelRatio,px:Math.round(innerWidth*devicePixelRatio)+"x"+Math.round(innerHeight*devicePixelRatio)})' 2>/dev/null | tail -1 || true)"
     printf 'viewport     %s\n' "${vp:-<not answering>}"
     printf 'pixels       YES — renders off-screen; capture at the display size, no clamping\n'
     printf 'next         node cdp.mjs --shot shot.png          (no --device needed)\n'
