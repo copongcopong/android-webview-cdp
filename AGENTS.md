@@ -32,7 +32,6 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
 | `cdp-webview.sh` | `up` / `direct` / `status` / `info` / `down` |
 | `cdp.mjs` | dependency-free CDP client (Node 22+ global `WebSocket`), incl. `--device` profiles |
 | `display.sh` | drives pi-trackpad's `vdisplay` to run this app on a virtual display |
-
 ### Two mechanisms worth understanding before changing anything
 
 1. **Why adb, and why a relay.** The DevTools server listens on the abstract unix
@@ -55,6 +54,35 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
   (someone else's — do not take them). Both 9333 and 9334 bind the *same* device
   loopback, so they can never be the same port.
 
+## Displays (two backends)
+
+`display.sh overlay [WxH@DPI]` is the **default** and has **no pi-trackpad dependency**: it
+writes the `overlay_display_devices` global setting (shell holds `WRITE_SECURE_SETTINGS`, so
+adb suffices), which makes system_server create a simulated secondary display. Phone-sized
+by construction — 1080×2340/420 gives the shell 411×851 CSS px at dpr 2.625 — and it renders
+off-screen at native resolution. `display.sh headless|visible|show|hide|none` are the
+optional pi-trackpad/Shizuku backend, needed only because a PUBLIC task-hosting display
+otherwise requires shell UID.
+
+Four things that will bite:
+
+- **`settings put global overlay_display_devices ""` fails** (`Bad arguments`). Clear with
+  `settings delete global overlay_display_devices` — what `overlay-off` runs. The setting
+  persists, so the display returns after a reboot until deleted.
+- **The setting wants `WxH/DPI`, not `WxH@DPI`.** Normalise before writing it, or you write
+  `2340/420` as the height and nothing is created.
+- **Force-stop before launching onto the display.** `am start --display N` on a running
+  activity *moves* the task: it keeps the old window size and carries the previous display's
+  density, so you get 480×993 CSS at dpr 2.25 instead of 411×851 at 2.625. Launch fresh, then
+  `am task resize <taskId> 0 0 <w> <h>` only if the window did not fill the display.
+- **`screencap` cannot see simulated displays** — `-a` lists only physical ones, `-d` takes
+  the SurfaceFlinger token and rejects a virtual display's. Capture with CDP `--shot`.
+
+A headless (`state=OFF`) pi-trackpad display gives no pixels at all (`visibilityState`
+`hidden`, rAF never fires, `captureScreenshot` times out) — though JS, DOM, network, timers
+and **CDP input injection** all still work, because CDP input is injected browser-side rather
+than as Android input.
+
 ## Known behaviours / gotchas
 
 - `aapt2 link` needs `-A assets`, or the HTML silently isn't in the APK.
@@ -65,15 +93,10 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
   `onCreate` and a second bind would fail with `EADDRINUSE`.
 - A backgrounded app cannot show a Toast (Android 11+).
 - `Target.createTarget` / `/json/new` are blocked on Android; attach to an existing target.
-- `screencap -d` wants the SurfaceFlinger token (not the display id), defaults to the
-  cover screen, and cannot capture virtual displays — capture via CDP `--shot` instead.
-- **A headless (`state=OFF`) display gives no pixels**: `visibilityState` is `hidden`,
-  `requestAnimationFrame` never fires, and `Page.captureScreenshot` times out. JS, DOM,
-  network, timers and CDP input injection all still work. For anything visual use the
-  surface-backed display (`display.sh visible`, and `show` to attach the surface).
 - **Emulated device pixels must fit the display surface.** Beyond it,
   `captureScreenshot` returns the requested size with the page drawn twice.
-  `cdp.mjs` clamps the scale factor to 3 / 2.625 / 2 / 1.5 / 1 accordingly.
+  `cdp.mjs` clamps the scale factor to 3 / 2.625 / 2 / 1.5 / 1 accordingly, so size the
+  display to the device you are testing when you need native-resolution captures.
 
 ## Verification status
 
@@ -81,10 +104,12 @@ Confirmed on SM-F936B, One UI, Android 16 / API 36. Keep this honest — do not 
 rows up without re-testing.
 
 **Verified:** socket name; `/json/version` package identity; `Runtime.evaluate`;
-`Input.dispatchMouseEvent`/`insertText`/`dispatchKeyEvent`; `Page.navigate` to
-external sites; `Network.*` events; `Page.captureScreenshot`; relay on 9334 with an
-empty `adb forward` table; the Java bridge crossing (`pi.info()` matched `pidof`);
-running on display 17 (XREAL) and display 24 (virtual, dpr 2.25) with input injection.
+`Input.dispatchMouseEvent`/`insertText`/`dispatchKeyEvent`; `Page.navigate` to external
+sites; `Network.*` events; `Page.captureScreenshot`; relay on 9334 with an empty
+`adb forward` table; the Java bridge crossing (`pi.info()` matched `pidof`); running on
+display 17 (XREAL), a pi-trackpad virtual display, and an `overlay_display_devices`
+simulated display (411x851 CSS @2.625, native 1082x2237 captures, and a full-retina
+1170x2532 when the display is sized 1200x2700).
 
-**Not verified:** multiple simultaneous CDP clients on one target; a WebSocket held
-open for hours through the relay; a WebView in a `TYPE_ACCESSIBILITY_OVERLAY` window.
+**Not verified:** multiple simultaneous CDP clients on one target; a WebSocket held open
+for hours through the relay; a WebView in a `TYPE_ACCESSIBILITY_OVERLAY` window.

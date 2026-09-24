@@ -11,4 +11,5 @@ sdk/
 # misc
 *.apk
 __pycache__/
+# throwaway captures at the repo root — docs/img/** is tracked on purpose
 /*.png

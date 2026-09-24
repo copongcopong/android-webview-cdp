@@ -45,6 +45,11 @@ with no adb forward:
 
 ![example.com rendered at an iPhone 14 viewport](docs/img/example-com-iphone-14.png)
 
+**No emulation at all** — example.com in the shell on a simulated phone display
+(`./display.sh overlay`), captured at the display's native 1082×2237:
+
+![example.com on a simulated 1080x2340 phone display, captured at native size](docs/img/native-phone-display.png)
+
 ## Prerequisites — setting up a fresh Android device
 
 ### The device
@@ -119,20 +124,15 @@ node cdp.mjs --device pixel-7 'document.title'
 Android 13+ will ask for **notification permission**: it belongs to the keep-alive foreground
 service, which is what stops the platform freezing the process (see *The freeze problem*).
 
-### Optional: virtual displays
+### Optional: pi-trackpad (only for the alternate display backend)
 
-Needs **[pi-trackpad](https://github.com/jan5o7o/pi-trackpad)** installed with (a) its
-accessibility service enabled and (b) Shizuku running and granted — creating a PUBLIC,
-task-hosting display requires shell UID, so it is that app's job, not this one's. Start
-Shizuku with its own wireless-debugging instructions, then grant it the
-`moe.shizuku.manager.permission.API_V23` permission. After that:
-
-```bash
-./display.sh visible      # or: headless
-```
-
-Without pi-trackpad you can still run the shell on the phone's own screen and drive it over
-the relay — the only thing you lose is the second, off-screen display.
+The **default** off-screen path (`./display.sh overlay`) needs nothing but adb — see
+*Running it off the phone screen*. [pi-trackpad](https://github.com/jan5o7o/pi-trackpad)
+is only required for the other backend, because a PUBLIC, task-hosting display needs shell
+UID. That means: pi-trackpad installed, (a) its accessibility service enabled and
+(b) Shizuku running and granted (`moe.shizuku.manager.permission.API_V23`). Then
+`./display.sh visible` or `headless` work. Without it you lose only that variant — the
+overlay display and the phone's own screen both still work.
 
 ## Three layers of control
 
@@ -186,16 +186,32 @@ so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP event
 
 `keystore.jks` is copied from `~/trackpad` so both APKs share one dev key.
 
-## Running it on a virtual display (and testing at phone sizes)
+## Running it off the phone screen (and testing at phone sizes)
 
-Display creation is **not** done here: a PUBLIC task-hosting display needs
-`ADD_TRUSTED_DISPLAY` / `CAPTURE_VIDEO_OUTPUT`, which normal apps don't hold. That
-machinery lives in **pi-trackpad** (`~/trackpad`), which owns one virtual-display slot
-via its Shizuku shell service. `display.sh` drives its `vdisplay` script over a
-broadcast and launches this app onto the result.
+Two backends, and **the default one has no pi-trackpad dependency**:
 
 ```bash
-./display.sh status        # what exists, where the app is, is the relay up
+./display.sh overlay                # adb only — a phone-sized simulated display
+./display.sh overlay 412x915@420    # any size you like
+./display.sh overlay-off            # clear it, app back to the phone
+
+./display.sh status                 # what exists, where the app is, is the relay up
+```
+
+**(a) `overlay` — needs nothing but adb.** `settings put global
+overlay_display_devices "1080x2340/420"` asks system_server to create a simulated
+secondary display; shell holds `WRITE_SECURE_SETTINGS`, so adb can do it. Result: a
+**phone-sized display the WebView fills at 411×851 CSS px / dpr 2.625**, rendering
+off-screen. Screenshots come back at the display's own resolution (1082×2237) with no
+emulation and no clamping.
+
+**(b) pi-trackpad — optional.** A PUBLIC, task-hosting display otherwise needs
+`ADD_TRUSTED_DISPLAY` / `CAPTURE_VIDEO_OUTPUT`, which normal apps don't hold; that app
+ows one display slot via its Shizuku shell service and `display.sh` drives its
+`vdisplay` script over a broadcast. Use it if you want its headless/visible/surface
+toggling:
+
+```bash
 ./display.sh headless      # OFF display, app runs there, no pixels
 ./display.sh visible       # surface-backed display: renders
 ./display.sh show | hide   # attach/detach that surface (hide = back to no pixels)
@@ -203,46 +219,75 @@ broadcast and launches this app onto the result.
 ./display.sh none          # destroy, app back to the phone screen
 ```
 
-The two kinds are **not** interchangeable — measured on SM-F936B / Android 16:
+Measured on SM-F936B / Android 16 — the three are **not** interchangeable:
 
-| | headless (state OFF) | visible (surface-backed) |
-|---|---|---|
-| JS / DOM / network / timers | yes | yes |
-| CDP input injection (`--click`, `--type`) | yes | yes |
-| the relay (no adb) | yes | yes |
-| `document.visibilityState` | `hidden` | `visible` |
-| `requestAnimationFrame` | **never fires** (0 frames in 800 ms) | runs (~84 frames / 700 ms) |
-| `Page.captureScreenshot` | **times out** | works |
-| good for | logic, DOM, network, a background browser | anything visual |
+| | `overlay` (adb) | trackpad visible | trackpad headless |
+|---|---|---|---|
+| JS / DOM / network / timers | yes | yes | yes |
+| CDP input injection (`--click`, `--type`) | yes | yes | yes |
+| the relay (no adb) | yes | yes | yes |
+| `document.visibilityState` | `visible` | `visible` | `hidden` |
+| `requestAnimationFrame` | runs | runs (~84/700 ms) | **never fires** (0/800 ms) |
+| `Page.captureScreenshot` | works, **native size** | works, float surface | **times out** |
+| phone-sized natively | yes (1080×2340) | no (1245×1397) | n/a |
+| needs pi-trackpad + Shizuku | **no** | yes | yes |
+
+### Two traps in the adb backend, both found the hard way
+
+- **`settings put global overlay_display_devices ""` fails** with `Bad arguments`.
+  Clear it with `settings delete global overlay_display_devices` — which is what
+  `overlay-off` runs. The setting is persisted, so the display comes back after a reboot
+  until you delete it.
+- **Stop the app before launching it onto the display.** `am start --display N` on an
+  already-running activity *moves* the task: it keeps the old window size and carries the
+  previous display's density, so you silently get 480×993 CSS at dpr 2.25 instead of
+  411×851 at 2.625. `display.sh overlay` force-stops first, then resizes the task only if
+  the window still did not come up full-width.
+
+Also worth knowing: `screencap -a` does **not** see simulated displays (it lists only the
+physical ones — 904×2316 cover and 1812×2176 inner here), so `Page.captureScreenshot`
+remains the way to look at the page.
 
 ### Phone-sized viewports
 
-The display's own size is pi-trackpad's (the surface-backed one is 1245×1397 px).
-Don't fight it — set the **test viewport** with CDP device emulation:
+Two ways, and they compose:
+
+**1. Size the display itself.** With the adb backend the display *is* whatever you ask for,
+so make it a phone. The default `./display.sh overlay` gives 1080×2340/420 → the shell fills
+it at **411×851 CSS px, dpr 2.625**, and a screenshot comes back at the display's own
+resolution. To host a *specific* device's full pixel grid, size the display to fit:
+
+```bash
+./display.sh overlay 1200x2700@420
+node cdp.mjs --device iphone-14 --nav https://example.com --wait h1 --shot shot.png
+# -> 1170x2532, unclamped (example in docs/img/example-com-iphone-14.png)
+```
+
+**2. Or emulate a device with CDP** — independent of the physical display:
 
 ```bash
 node cdp.mjs --list-devices
+device: pixel-7 -> {"w":412,"h":915,"dpr":2.624999910593033}
 node cdp.mjs --device pixel-7 --nav https://example.com --wait h1 --shot shot.png
-node cdp.mjs --device iphone-14 'JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio})'
 node cdp.mjs --metrics 412x915x2.625 …     # custom; --reset-device to clear
 ```
 
-The page then sees an exact phone viewport (e.g. `412x915 @2.625`, touch enabled,
-mobile UA) whatever the physical display is.
+The page then sees an exact phone viewport (touch enabled, mobile UA) whatever the display is.
 
-**One trap, caught by looking at the output instead of trusting the file size:** the
-WebView composites into its window's surface, so the emulated *device-pixel* size must
-fit inside that surface. `--device iphone-14` (390×844 @3x = 1170×2532 px) does **not**
-fit 1397 px, and `captureScreenshot` still returns a 1170×2532 PNG — with **the page
-drawn twice**. `cdp.mjs` therefore clamps the scale factor to the largest standard value
-(3, 2.625, 2, 1.5, 1) that fits, and says so on stderr: iPhone-14 becomes 1.5x →
-585×1266. `--no-clamp` reproduces the tiling deliberately.
+**The trap, caught by looking at the output instead of trusting the file size:** the WebView
+composites into its window's surface, so the emulated *device-pixel* size must fit inside
+that surface. Past it, `Page.captureScreenshot` still returns an image of the requested size
+— with **the page drawn twice**. `cdp.mjs` clamps the scale factor to the largest standard
+value (3, 2.625, 2, 1.5, 1) that fits and says so on stderr; `--no-clamp` reproduces the
+tiling deliberately.
 
-Consequence: on this device a **retina phone-sized screenshot is not achievable** —
-neither the float surface (1245×1397) nor the phone's own screen (1812×2176) is tall
-enough for 1170×2532. CSS layout is exact regardless (which is what layout tests care
-about); for pixel-perfect retina captures, drive **real Chrome** over CDP (~9222 built),
-which composites off-screen at any size.
+That is exactly why (1) matters: on the default 1080×2340 display a 1170×2532 viewport does
+not fit, so iPhone-14 gets clamped to 2x (780×1688). Sizing the display to 1200×2700 lets the
+full 3x viewport through at native resolution. Same rule applies to the pi-trackpad float
+surface, which is only 1245×1397 — retina captures are not possible there.
+
+Captures are always `Page.captureScreenshot`, never `screencap`: simulated displays are not
+in `screencap`'s list (it only sees the physical ones — 904×2316 cover, 1812×2176 inner).
 
 ## The freeze problem (the thing that actually bites)
 
@@ -356,12 +401,15 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 ## Environment notes
 
-- A **surface-backed** display only produces pixels while its surface is attached:
-  `vdisplay show` (and the phone screen on). `hide`, or the screen going off, returns
-  you to the headless situation with the apps still running.
-- Virtual-display creation requires **pi-trackpad running, its accessibility service
-  enabled, and Shizuku granted**; `display.sh` reports whatever it gets back.
-- pi-trackpad requests 1920×1080 for the display, but the surface-backed size follows
-  its float window (1245×1397). Making the *display itself* phone-shaped would mean
-  adding w/h/dpi to pi-trackpad's `VDisplayReceiver` + `TrackpadService` (its AIDL
-  already takes them) — not done here, because that needs rebuilding that app.
+- The `overlay_display_devices` backend is a **persisted global setting**: it survives a
+  reboot until you clear it with `./display.sh overlay-off`.
+- A pi-trackpad **surface-backed** display only produces pixels while its surface is
+  attached: `vdisplay show` (and the phone screen on). `hide`, or the screen going off,
+  returns you to the headless situation with the apps still running.
+- `display.sh headless|visible|…` needs **pi-trackpad running, its accessibility service
+  enabled, and Shizuku granted**; `display.sh` reports whatever it gets back. The
+  `overlay` backend needs none of that.
+- pi-trackpad requests 1920×1080 for its display, but the surface-backed size follows its
+  float window (1245×1397) — which is why retina captures need the overlay backend, or a
+  rebuild of that app with w/h/dpi plumbed through its `VDisplayReceiver` (its AIDL already
+  takes them).
