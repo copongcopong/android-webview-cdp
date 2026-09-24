@@ -26,6 +26,114 @@ Shizuku) is refused too. `adbd` *is* allowed, so `adb forward` is the way in —
 and because Termux's own adb server runs on the device, the forwarded port lands
 on the **device's own loopback**.
 
+## Screenshots
+
+All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e. the same
+`Page.captureScreenshot` path documented below, not a phone screenshot:
+
+**The shell on a surface-backed virtual display** (1247×1398 px — pi-trackpad's float surface):
+
+![Pi WebView Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
+
+**The same page under `--device pixel-7`** — the page lays out at 412×915 CSS px with touch
+and a mobile UA (scale factor clamped to 1.5 here; see *Phone-sized viewports*):
+
+![The demo page laid out at a Pixel 7 viewport](docs/img/phone-viewport-pixel7.png)
+
+**A real site at `--device iphone-14`** — 390×844 CSS px, driven and captured over the relay
+with no adb forward:
+
+![example.com rendered at an iPhone 14 viewport](docs/img/example-com-iphone-14.png)
+
+## Prerequisites — setting up a fresh Android device
+
+### The device
+
+- **Android 14+ (API 34+).** `build.sh` declares `minSdk 30`, but the keep-alive service
+  uses `foregroundServiceType="specialUse"`, which only exists from API 34 — treat 14 as the
+  real floor. Verified on Android 16 / One UI (SM-F936B); **not tested on anything older.**
+- **A current WebView provider** (Chrome, or Google's standalone WebView). The CDP version
+  you get comes from it — this device reports `Chrome/153`, protocol 1.3.
+- Nothing else. No root, no accessibility service, no Shizuku: those are only needed for the
+  optional virtual-display mode. The relay means you never even need adb *after launch*.
+
+### Termux and the build tools
+
+Install **Termux from F-Droid or GitHub releases** — the Play Store build is deprecated and stale.
+
+```bash
+pkg update && pkg upgrade
+pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 unzip
+```
+
+| need | package | provides |
+|---|---|---|
+| resource/manifest compiler | `aapt2` | `aapt2` |
+| dexer | `d8` | `d8` |
+| signing | `apksigner` | `apksigner` |
+| javac / keytool | `openjdk-21` | `javac`, `keytool` (21.0.12 here) |
+| adb | `android-tools` | `adb` 1.0.41 / 35.0.2 |
+| CDP client | `nodejs-lts` | `node` (needs **22+** for the built-in `WebSocket`) |
+| helper scripts | `python3`, `unzip` | `python3`, `unzip` |
+
+`aidl` is **not** needed here (only pi-trackpad needs it).
+
+### The platform jar (27 MB, not in this repo)
+
+```bash
+curl -LO https://dl.google.com/android/repository/platform-36_r02.zip   # HTTP 200, verified
+unzip -j platform-36_r02.zip android-36/android.jar -d sdk/platforms/android-36/
+```
+
+Sanity check: that jar is ~27,768,000 bytes. `build.sh` also falls back to
+`~/trackpad/sdk/platforms/android-36/android.jar` if you have pi-trackpad checked out.
+
+### Wireless ADB, from Termux on the same device
+
+Because Termux runs *on* the phone, its **adb server runs inside Termux** — which is why
+`adb forward` lands on the device's own loopback and every CDP path here is `127.0.0.1`.
+
+1. Settings → About phone → tap **Build number** 7× → Developer options.
+2. **Wireless debugging** → on → *Pair device with pairing code*; note the IP:port **and the code**.
+3. `adb pair 192.168.x.y:<pair-port>` — asks for the code; once per device.
+4. `adb connect 192.168.x.y:<connect-port>` — the port shown on the Wireless debugging screen,
+   which **changes every time you toggle it**.
+
+Notes worth having in advance:
+- On the same device, `adb connect 127.0.0.1:<port>` also works (verified) — no IP needed.
+- `adb mdns services` does **not** work with Termux's `android-tools` build
+  (`error: unknown host service 'mdns:services'`). Read the port off the screen, or discover
+  it over mDNS (`_adb-tls-connect._tcp`) with any zeroconf client.
+- Transports are ambiguous with more than one connection — use `adb -s <host:port>`.
+
+### Build, install, first run
+
+```bash
+./build.sh
+adb install -r out/pi-webview.apk
+adb shell am start -n com.pi.webview/.MainActivity          # or --display <id>
+./cdp-webview.sh direct                                     # relay on 9334, no forward
+node cdp.mjs --device pixel-7 'document.title'
+```
+
+Android 13+ will ask for **notification permission**: it belongs to the keep-alive foreground
+service, which is what stops the platform freezing the process (see *The freeze problem*).
+
+### Optional: virtual displays
+
+Needs **[pi-trackpad](https://github.com/jan5o7o/pi-trackpad)** installed with (a) its
+accessibility service enabled and (b) Shizuku running and granted — creating a PUBLIC,
+task-hosting display requires shell UID, so it is that app's job, not this one's. Start
+Shizuku with its own wireless-debugging instructions, then grant it the
+`moe.shizuku.manager.permission.API_V23` permission. After that:
+
+```bash
+./display.sh visible      # or: headless
+```
+
+Without pi-trackpad you can still run the shell on the phone's own screen and drive it over
+the relay — the only thing you lose is the second, off-screen display.
+
 ## Three layers of control
 
 | Layer | Channel | What it can do | Needs |
