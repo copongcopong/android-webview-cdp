@@ -1,0 +1,98 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Hand-rolled Android build for Termux/aarch64 — adapted from ~/trackpad/build.sh.
+# Differences: no aidl, no external jars, and assets/ is linked in (-A).
+# aapt2 -> javac -> d8 -> package -> alignment check -> apksigner
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+ANDROID_JAR="$ROOT/sdk/platforms/android-36/android.jar"
+# Reuse the platform jar already fetched for pi-trackpad if this project has none.
+if [ ! -f "$ANDROID_JAR" ] && [ -f "$HOME/trackpad/sdk/platforms/android-36/android.jar" ]; then
+  ANDROID_JAR="$HOME/trackpad/sdk/platforms/android-36/android.jar"
+  echo "    (using $ANDROID_JAR)"
+fi
+[ -f "$ANDROID_JAR" ] || { echo "missing android.jar — see README"; exit 1; }
+
+BUILD="$ROOT/build"
+OUT="$ROOT/out"
+KS="$ROOT/keystore.jks"
+KSPASS="android"
+MIN_SDK=30
+TARGET_SDK=36
+
+rm -rf "$BUILD" "$OUT"
+mkdir -p "$BUILD/res" "$BUILD/classes" "$BUILD/gen" "$BUILD/dex" "$OUT"
+
+echo "==> 1/5 aapt2 compile"
+aapt2 compile --dir "$ROOT/res" -o "$BUILD/res.zip"
+
+echo "==> 2/5 aapt2 link (+assets)"
+aapt2 link \
+  -o "$BUILD/base.apk" \
+  -I "$ANDROID_JAR" \
+  --manifest "$ROOT/AndroidManifest.xml" \
+  --java "$BUILD/gen" \
+  -A "$ROOT/assets" \
+  --min-sdk-version "$MIN_SDK" \
+  --target-sdk-version "$TARGET_SDK" \
+  --version-code 1 --version-name 0.1 \
+  "$BUILD/res.zip"
+
+echo "==> 3/5 javac"
+find "$ROOT/java" "$BUILD/gen" -name '*.java' > "$BUILD/sources.txt"
+javac \
+  -source 8 -target 8 \
+  -bootclasspath "$ANDROID_JAR" \
+  -encoding UTF-8 \
+  -nowarn \
+  -d "$BUILD/classes" \
+  @"$BUILD/sources.txt" 2>&1 | grep -viE "bootstrap class path|source value 8|target value 8|deprecat" || true
+[ -d "$BUILD/classes/com/pi/webview" ] || { echo "javac produced no classes"; exit 1; }
+
+echo "==> 4/5 d8"
+find "$BUILD/classes" -name '*.class' > "$BUILD/inputs.txt"
+d8 --lib "$ANDROID_JAR" --min-api "$MIN_SDK" --output "$BUILD/dex" @"$BUILD/inputs.txt"
+
+cp "$BUILD/base.apk" "$OUT/pi-webview-unsigned.apk"
+cd "$BUILD/dex" && zip -q -X "$OUT/pi-webview-unsigned.apk" classes.dex
+cd "$ROOT"
+
+echo "==> 4b/5 alignment report"
+python3 - "$OUT/pi-webview-unsigned.apk" <<'PY'
+import sys, zipfile, struct
+p = sys.argv[1]
+z = zipfile.ZipFile(p)
+bad = []
+for i in z.infolist():
+    with open(p, 'rb') as f:
+        f.seek(i.header_offset)
+        raw = f.read(30)
+        if raw[:4] != b'PK\x03\x04':
+            bad.append((i.filename, 'bad-local-header')); continue
+        nlen, elen = struct.unpack('<HH', raw[26:30])
+        data_off = i.header_offset + 30 + nlen + elen
+    stored = i.compress_type == zipfile.ZIP_STORED
+    ok = (data_off % 4 == 0) if stored else True
+    print(f"   {i.filename:30} {'STORED' if stored else 'DEFLATE':8} off={data_off:8} align4={'OK' if ok else 'BAD'}")
+    if stored and not ok:
+        bad.append((i.filename, f'offset {data_off} not 4-aligned'))
+if bad:
+    print('   !! alignment problems:', bad); sys.exit(1)
+print('   alignment OK (all STORED entries 4-byte aligned)')
+PY
+
+echo "==> 5/5 sign"
+if [ ! -f "$KS" ]; then
+  keytool -genkeypair -v -keystore "$KS" -storepass "$KSPASS" -keypass "$KSPASS" \
+    -alias pi -keyalg RSA -keysize 2048 -validity 10000 \
+    -dname "CN=Pi WebView, OU=dev, O=local, L=., S=., C=US" >/dev/null 2>&1
+  echo "    generated $KS"
+fi
+apksigner sign \
+  --ks "$KS" --ks-pass "pass:$KSPASS" --key-pass "pass:$KSPASS" \
+  --v1-signing-enabled true --v2-signing-enabled true \
+  --out "$OUT/pi-webview.apk" "$OUT/pi-webview-unsigned.apk"
+
+apksigner verify --print-certs "$OUT/pi-webview.apk" | head -4
+echo
+echo "APK: $OUT/pi-webview.apk  ($(du -h "$OUT/pi-webview.apk" | cut -f1))"

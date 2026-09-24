@@ -1,0 +1,14 @@
+# build output
+build/
+out/
+
+# signing key — never commit
+keystore.jks
+
+# android platform jar (fetched on demand, or borrowed from ~/trackpad; see README)
+sdk/
+
+# misc
+*.apk
+__pycache__/
+/*.png

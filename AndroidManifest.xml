@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.pi.webview"
+    android:versionCode="1"
+    android:versionName="0.1">
+
+    <!-- Not needed for CDP-over-adb-forward (that path is a local socket).
+         Needed only if the page itself loads remote content. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Keeps the process out of the frozen cgroup while backgrounded, so the
+         DevTools socket stays reachable from Termux. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="Pi WebView Shell"
+        android:allowBackup="false"
+        android:hardwareAccelerated="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="Pi WebView Shell"
+            android:configChanges="orientation|screenSize|keyboardHidden|density">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep the WebView and its DevTools debugging socket reachable while the app is backgrounded" />
+        </service>
+
+    </application>
+</manifest>
