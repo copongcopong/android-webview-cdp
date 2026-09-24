@@ -11,6 +11,16 @@ Companion to `~/trackpad` (Pi Trackpad) and a `-A assets` variant of its `build.
 
 ## Build & install
 
+On a new machine, run the read-only checkup first — it prints what is missing and the exact
+command to fix each item, and writes nothing:
+
+```bash
+bash ./setup.sh --pre-install-checkup    # pre-install checkup (no changes)
+bash ./setup.sh                          # then: install pkgs, build, install, verify
+```
+
+By hand, the same thing is:
+
 ```bash
 ./build.sh                       # aapt2 -> javac -> d8 -> alignment check -> apksigner
 adb install -r out/pi-webview.apk
@@ -19,6 +29,21 @@ adb shell am start -n com.pi.webview/.MainActivity            # optionally --dis
 
 `build.sh` looks for `sdk/platforms/android-36/android.jar` and falls back to
 `~/trackpad/sdk/...`. `keystore.jks` (signing key), `out/`, `build/` are gitignored.
+
+Everything needed before this is in the README's *Prerequisites — setting up a fresh Android
+device*: Termux package list (`aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3
+zip unzip curl` — **`zip` is easy to miss and `build.sh` needs it to add `classes.dex`**),
+the platform jar, and wireless-ADB pairing.
+
+Two traps for a fresh checkout:
+
+- **No signing key is committed.** `build.sh` generates `keystore.jks` on first use, so a fresh
+  clone signs with a new key and Android will refuse to update an app installed from someone
+  else's build: `adb uninstall com.pi.webview` first (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+  otherwise).
+- **Off-device (laptop + USB phone):** run the scripts as `bash build.sh` — their shebangs are
+  absolute Termux paths — and reach the relay with `adb forward tcp:9334 tcp:9334`, which
+  forwards to the device's loopback where the relay listens.
 
 ## Architecture
 

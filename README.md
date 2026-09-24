@@ -52,6 +52,36 @@ with no adb forward:
 
 ## Prerequisites — setting up a fresh Android device
 
+### The whole thing, scripted
+
+```bash
+# 1. Termux (required) — from F-Droid or GitHub releases, not the Play Store
+# 2. get the code (private repo)
+gh repo clone jan5o7o/webview-shell && cd webview-shell
+# 3. READ-ONLY checkup: prints what is missing and the exact command to fix each item
+bash ./setup.sh --pre-install-checkup
+# 4. do what it says, then build + install + verify in one pass
+bash ./setup.sh
+```
+
+`setup.sh` is idempotent and covers the traps a fresh machine hits: missing Termux packages
+(including **`zip`**, which is a separate package from `unzip` and easy to miss), the 27 MB
+platform jar that is deliberately not in the repo, and the signature clash from a fresh
+checkout (no signing key is committed, so it uninstalls the old copy and reinstalls). It ends
+with an unambiguous verdict, and in checkup mode it writes nothing at all.
+
+Run it as `bash ./setup.sh` — the shebang is a Termux absolute path, so that form also keeps
+working if you are on a laptop with a USB phone.
+
+**What it cannot do** (it says so, and tells you who can):
+
+| not scriptable | why |
+|---|---|
+| install Termux | you are reading this from Termux; it is the one hard prerequisite |
+| enable Developer options / Wireless debugging | Settings UI only |
+| `adb pair` the device | one-time, needs the pairing code on screen |
+| install pi-trackpad, grant Shizuku | only needed for the alternate display backend |
+
 ### The device
 
 - **Android 14+ (API 34+).** `build.sh` declares `minSdk 30`, but the keep-alive service
@@ -68,7 +98,7 @@ Install **Termux from F-Droid or GitHub releases** — the Play Store build is d
 
 ```bash
 pkg update && pkg upgrade
-pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 unzip
+pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 zip unzip curl
 ```
 
 | need | package | provides |
@@ -79,7 +109,9 @@ pkg install aapt2 d8 apksigner openjdk-21 android-tools nodejs-lts python3 unzip
 | javac / keytool | `openjdk-21` | `javac`, `keytool` (21.0.12 here) |
 | adb | `android-tools` | `adb` 1.0.41 / 35.0.2 |
 | CDP client | `nodejs-lts` | `node` (needs **22+** for the built-in `WebSocket`) |
-| helper scripts | `python3`, `unzip` | `python3`, `unzip` |
+| jar extraction | `unzip` | `unzip` |
+| **packaging** | `zip` | `build.sh` adds `classes.dex` with `zip` — a *separate* package from `unzip` |
+| helper scripts | `python3`, `curl` | used by `cdp-webview.sh` / `display.sh` |
 
 `aidl` is **not** needed here (only pi-trackpad needs it).
 
@@ -113,6 +145,8 @@ Notes worth having in advance:
 
 ### Build, install, first run
 
+By hand:
+
 ```bash
 ./build.sh
 adb install -r out/pi-webview.apk
@@ -121,8 +155,49 @@ adb shell am start -n com.pi.webview/.MainActivity          # or --display <id>
 node cdp.mjs --device pixel-7 'document.title'
 ```
 
+**If the app is already installed by someone else's build, uninstall it first:**
+
+```bash
+adb uninstall com.pi.webview     # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
+```
+
+There is deliberately **no signing key in this repo** — `build.sh` generates `keystore.jks` on
+first use. So a fresh clone signs with a *new* key, and Android refuses to replace an
+installed app whose signature differs. Uninstalling costs nothing here (the app stores no data).
+
 Android 13+ will ask for **notification permission**: it belongs to the keep-alive foreground
 service, which is what stops the platform freezing the process (see *The freeze problem*).
+`bash ./setup.sh` does all of the above plus the checks, and grants that permission for you.
+
+### Verifying it worked
+
+Each step has an unambiguous check — useful when an agent is driving:
+
+| step | check | expected |
+|---|---|---|
+| build | `ls -l out/pi-webview.apk` | ~20 KB file |
+| installed | `adb shell pm list packages \| grep com.pi.webview` | `package:com.pi.webview` |
+| running | `adb shell pidof com.pi.webview` | a pid |
+| relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
+| CDP | `node cdp.mjs 'document.title'` | `Pi WebView Shell` |
+| input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__pi.taps()'` | counter +1 |
+| capture | `node cdp.mjs --shot shot.png` | PNG written, non-zero |
+| off-screen | `./display.sh overlay` | a display id and `411x851` CSS |
+
+### If the agent is not running in Termux on the phone
+
+Everything is designed for Termux-on-device, but an agent on a laptop with a USB phone works
+with two adjustments:
+
+- **Invoke the scripts as `bash build.sh`.** Their shebangs are absolute Termux paths
+  (`#!/data/data/com.termux/files/usr/bin/bash`), which do not exist on a laptop.
+- **Reach the relay with a TCP forward**: `adb forward tcp:9334 tcp:9334`. That forwards to the
+  *device's* loopback, where the relay listens, so the CDP client runs happily on the laptop
+  (verified: `curl 127.0.0.1:9444/json/version` through a forward returns this app's
+  DevTools handshake). `display.sh overlay` also works from off-device — it is only `adb`
+  writing a setting.
+
+Note the repo is **private**: cloning needs `gh` auth or a token.
 
 ### Optional: pi-trackpad (only for the alternate display backend)
 
