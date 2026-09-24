@@ -7,6 +7,29 @@ Built on-device, no Gradle, no Android SDK — a hand-rolled `build.sh`
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
+## Quick start
+
+Termux on the phone, Android 14+ — [*Prerequisites*](#prerequisites-a-fresh-android-device)
+is the long version:
+
+```bash
+gh repo clone jan5o7o/webview-shell && cd webview-shell
+bash ./setup.sh --pre-install-checkup     # read-only: says exactly what to fix, if anything
+bash ./setup.sh                           # installs, builds, installs, launches, verifies
+node cdp.mjs --repl                       # drive the page
+```
+
+To run it off the phone screen instead, at a phone-sized viewport:
+
+```bash
+./display.sh overlay                      # a simulated 1080x2340 display, rendering off-screen
+node cdp.mjs --shot shot.png              # 1082x2237
+```
+
+One thing cannot be scripted: the adb connection (Developer options → Wireless debugging →
+*pair with a code*). After that the flow is automatic — and once the app is running, **nothing
+needs adb at all**, because the app serves CDP on `127.0.0.1:9334` itself.
+
 ## How it works
 
 ```
@@ -56,32 +79,22 @@ display's native 1082×2237:
 
 ![pi.dev documentation, extensions page, at a phone viewport](docs/img/pi-dev-extensions.png)
 
-## Prerequisites — setting up a fresh Android device
+## Prerequisites: a fresh Android device
 
-### The whole thing, scripted
+### What `setup.sh` does — and won't do
 
-```bash
-# 1. Termux (required) — from F-Droid or GitHub releases, not the Play Store
-# 2. get the code
-gh repo clone jan5o7o/webview-shell && cd webview-shell   # or: git clone https://github.com/jan5o7o/webview-shell.git
-# 3. READ-ONLY checkup: prints what is missing and the exact command to fix each item
-bash ./setup.sh --pre-install-checkup
-# 4. do what it says, then build + install + verify in one pass
-bash ./setup.sh
-```
-
-`setup.sh` is idempotent and covers the traps a fresh machine hits: missing Termux packages
-(including **`zip`**, which is a separate package from `unzip` and easy to miss), the 27 MB
-platform jar that is deliberately not in the repo, and the signature clash from a fresh
-checkout (no signing key is committed, so it uninstalls the old copy and reinstalls). It ends
-with an unambiguous verdict, and in checkup mode it writes nothing at all.
+Commands are in [Quick start](#quick-start). `setup.sh` is idempotent and covers the traps a fresh
+machine hits: missing Termux packages (including **`zip`**, a separate package from `unzip` and
+easy to miss), the 27 MB platform jar that is deliberately not in the repo, a missing signing
+password, and the signature clash from a fresh checkout (no signing key is committed, so it
+uninstalls the old copy and reinstalls). It ends with an unambiguous verdict, and in checkup mode
+it writes nothing at all.
 
 Run it as `bash ./setup.sh` — the shebang is a Termux absolute path, so that form also keeps
 working if you are on a laptop with a USB phone.
 
-> **See it done for real:** [*A real run, start to finish*](#a-real-run-start-to-finish) below
-> walks the whole thing on a phone that had nothing but Termux installed, including the adb
-> pairing that actually gave trouble.
+> **See it done for real:** [*A real run, start to finish*](#a-real-run-start-to-finish) — the
+> parts that went wrong and why.
 
 **What it cannot do** (it says so, and tells you who can):
 
@@ -177,43 +190,35 @@ Notes worth having in advance:
   it over mDNS (`_adb-tls-connect._tcp`) with any zeroconf client.
 - Transports are ambiguous with more than one connection — use `adb -s <host:port>`.
 
-### Build, install, first run
+### First run: the three things that surprise people
 
-By hand:
+Commands are in [*Use*](#use); this is what actually needs explaining.
+
+**1. A fresh clone signs with a different key.** There is deliberately **no signing key in this
+repo** — `build.sh` generates `keystore.jks` on first use — so Android refuses to replace an app
+installed from someone else's build:
 
 ```bash
-./build.sh
-adb install -r out/pi-webview.apk
-adb shell am start -n com.pi.webview/.MainActivity          # or --display <id>
-./cdp-webview.sh direct                                     # relay on 9334, no forward
-node cdp.mjs --device pixel-7 'document.title'
+adb uninstall com.pi.webview        # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
 ```
 
-**If the app is already installed by someone else's build, uninstall it first:**
+Uninstalling costs nothing here (the app stores no data).
+
+**2. The keystore password is not in the repo either.** `build.sh` takes it from `KSPASS` in the
+environment or from `~/.pi-webview-kspass`, and **fails closed** when neither is present — before
+it deletes anything, so a missing password cannot cost you a build:
 
 ```bash
-adb uninstall com.pi.webview     # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
-```
-
-There is deliberately **no signing key in this repo** — `build.sh` generates `keystore.jks` on
-first use. So a fresh clone signs with a *new* key, and Android refuses to replace an
-installed app whose signature differs. Uninstalling costs nothing here (the app stores no data).
-
-**The keystore password is not in the repo either.** `build.sh` takes it from `KSPASS` in the
-environment or from `~/.pi-webview-kspass` (outside the repo), and **fails closed** when neither
-is present — before it deletes anything, so a missing password cannot cost you a build:
-
-```bash
-KSPASS=... ./build.sh              # or once:
+KSPASS=... ./build.sh               # or once:
 printf %s 'the-password' > ~/.pi-webview-kspass && chmod 600 ~/.pi-webview-kspass
 ```
 
-A keystore keeps whatever password it was created with, so if you already have one, that file has
-to contain *that* password rather than a new one.
+A keystore keeps whatever password it was created with, so with an existing `keystore.jks` that
+file must hold *that* password rather than a new one.
 
-Android 13+ will ask for **notification permission**: it belongs to the keep-alive foreground
-service, which is what stops the platform freezing the process (see *The freeze problem*).
-`bash ./setup.sh` does all of the above plus the checks, and grants that permission for you.
+**3. Android 13+ asks for notification permission.** It belongs to the keep-alive foreground
+service — the thing that stops the platform freezing the process (see *The freeze problem*).
+`bash ./setup.sh` grants it for you.
 
 ### Verifying it worked
 
@@ -247,7 +252,49 @@ with two adjustments:
 Clone with `gh repo clone` or plain `git clone` (a private repo would also need auth).
 
 
+## Three layers of control
+
+| Layer | Channel | What it can do | Needs |
+|---|---|---|---|
+| **Transport** | `adb forward tcp:9333 localabstract:…` | reach the socket at all | adb (already connected to itself) |
+| **Page** | CDP over the forwarded port | DOM/CSS/JS, real mouse + key input, navigation, network, screenshots, console | nothing in the app |
+| **App** | `@JavascriptInterface` bridge (`pi.*`), driven *through* CDP | anything the Java side exposes: Android APIs, app state | rebuild the app |
+
+CDP is the only layer that needs no app cooperation, which is why it's the useful
+one: you can point the same tooling at any WebView/Chrome.
+
+## Use
+
+```bash
+cd ~/webview-shell
+./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
+adb install -r out/pi-webview.apk
+adb shell am start -n com.pi.webview/.MainActivity   # ← starts the relay
+
+node cdp.mjs 'document.title'               # evaluate in the page
+node cdp.mjs --click 'button'               # real mouse input (or --click 'text=tap me')
+node cdp.mjs --type 'hello'                 # insertText into the focused element
+node cdp.mjs --key Enter                    # Enter Tab Escape Backspace Arrow… PageUp/Down
+node cdp.mjs --nav https://example.com      # navigate + wait for load
+node cdp.mjs --wait '#ready'                # poll for a selector
+node cdp.mjs --shot page.png                # screenshot the page
+node cdp.mjs --repl                         # interactive: .help .click .nav .shot .exit
+node cdp.mjs 'pi.info()'                    # cross into the Android layer
+```
+
+Actions run in a fixed order (`nav → wait → click → type → key → expression → shot`),
+so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP events.
+
+**Nothing above touches adb after `am start`.** The app publishes its own DevTools socket on
+`127.0.0.1:9334` (`RelayServer`), so the client talks straight to it. The other transport is an
+`adb forward`, driven by `./cdp-webview.sh up | direct | status | info | down`, which you need
+when you want a port without the app's relay running, or from a laptop — the two are compared in
+*Two ways to get a port*.
+
 ## A real run, start to finish
+
+*A record of an actual run — context, not a required path. Follow
+[Quick start](#quick-start) and [Use](#use) instead; this is here for the parts that went wrong.*
 
 This is the whole flow as it actually went on a phone that had never seen this repo — a Galaxy
 Z Fold on Android 16 with Termux installed and nothing else. Output is trimmed, but the
@@ -394,45 +441,6 @@ else's site.)
 | adb after launch | not needed — the relay served CDP throughout |
 | human hands | developer options, the pairing code, and later the display toggle |
 | wall-clock cost | dominated by the 27 MB jar download and the build; the pairing was the only fiddly part |
-
-## Three layers of control
-
-| Layer | Channel | What it can do | Needs |
-|---|---|---|---|
-| **Transport** | `adb forward tcp:9333 localabstract:…` | reach the socket at all | adb (already connected to itself) |
-| **Page** | CDP over the forwarded port | DOM/CSS/JS, real mouse + key input, navigation, network, screenshots, console | nothing in the app |
-| **App** | `@JavascriptInterface` bridge (`pi.*`), driven *through* CDP | anything the Java side exposes: Android APIs, app state | rebuild the app |
-
-CDP is the only layer that needs no app cooperation, which is why it's the useful
-one: you can point the same tooling at any WebView/Chrome.
-
-## Use
-
-```bash
-cd ~/webview-shell
-./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
-adb install -r out/pi-webview.apk
-adb shell am start -n com.pi.webview/.MainActivity   # ← starts the relay
-
-node cdp.mjs 'document.title'               # evaluate in the page
-node cdp.mjs --click 'button'               # real mouse input (or --click 'text=tap me')
-node cdp.mjs --type 'hello'                 # insertText into the focused element
-node cdp.mjs --key Enter                    # Enter Tab Escape Backspace Arrow… PageUp/Down
-node cdp.mjs --nav https://example.com      # navigate + wait for load
-node cdp.mjs --wait '#ready'                # poll for a selector
-node cdp.mjs --shot page.png                # screenshot the page
-node cdp.mjs --repl                         # interactive: .help .click .nav .shot .exit
-node cdp.mjs 'pi.info()'                    # cross into the Android layer
-```
-
-Actions run in a fixed order (`nav → wait → click → type → key → expression → shot`),
-so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP events.
-
-**Nothing above touches adb after `am start`.** The app publishes its own DevTools socket on
-`127.0.0.1:9334` (`RelayServer`), so the client talks straight to it. The other transport is an
-`adb forward`, driven by `./cdp-webview.sh up | direct | status | info | down`, which you need
-when you want a port without the app's relay running, or from a laptop — the two are compared in
-*Two ways to get a port*.
 
 ## Files
 
