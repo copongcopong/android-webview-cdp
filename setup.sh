@@ -19,7 +19,8 @@
 # What it CANNOT do — these need your hands on the phone, and it tells you so:
 #   * enable Developer options / Wireless debugging, and the one-time `adb pair`
 # Everything else it handles, including the traps: a missing `zip`, a platform jar that
-# was never downloaded, and the signature clash from a fresh checkout.
+# was never downloaded, a missing signing password, and the signature clash from a fresh
+# checkout.
 #
 # Off-device (laptop + USB): run as `bash setup.sh` — this shebang is a Termux path.
 
@@ -123,7 +124,23 @@ else
     fi
 fi
 
-# ---------------------------------------------------------------- 4. adb
+# ---------------------------------------------------------------- 4. signing password
+step "keystore password"
+KSFILE="$HOME/.pi-webview-kspass"
+if [ -n "${KSPASS:-}" ]; then
+    ok "KSPASS set in the environment"
+elif [ -f "$KSFILE" ]; then
+    ok "$KSFILE present"
+elif [ -f keystore.jks ]; then
+    # the password is whatever this key was created with; it cannot be invented
+    bad "keystore.jks exists but its password is not available — build.sh fails closed"
+    fix "printf %s 'the-password' > $KSFILE && chmod 600 $KSFILE   # must match the existing key"
+else
+    bad "no signing password, so build.sh can neither create nor use a keystore"
+    fix "pick one: printf %s 'some-password' > $KSFILE && chmod 600 $KSFILE   # a new key is generated"
+fi
+
+# ---------------------------------------------------------------- 5. adb
 step "adb"
 if [ "$MODE" = build ]; then
     info "not needed for --build (skipped)"
@@ -141,7 +158,7 @@ else
     [ "$MODE" = check ] || info "(continuing — build does not need adb)"
 fi
 
-# ---------------------------------------------------------------- 5. build
+# ---------------------------------------------------------------- 6. build
 step "build"
 if [ "$MODE" = check ]; then
     info "skipped (--check)"
@@ -153,7 +170,7 @@ fi
 
 [ "$MODE" = build ] && { printf '\n'; [ "$FAILED" = 0 ] && echo "built." || echo "problems above."; exit "$FAILED"; }
 
-# ---------------------------------------------------------------- 6. install
+# ---------------------------------------------------------------- 7. install
 step "install"
 if [ "$MODE" = check ]; then
     info "skipped (--check)"
@@ -177,7 +194,7 @@ else
         && ok "notification permission granted" || info "notification permission not granted (optional)"
 fi
 
-# ---------------------------------------------------------------- 7. launch + verify
+# ---------------------------------------------------------------- 8. launch + verify
 step "launch and verify"
 if [ "$MODE" = check ]; then
     info "skipped (--check)"

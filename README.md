@@ -174,6 +174,18 @@ There is deliberately **no signing key in this repo** — `build.sh` generates `
 first use. So a fresh clone signs with a *new* key, and Android refuses to replace an
 installed app whose signature differs. Uninstalling costs nothing here (the app stores no data).
 
+**The keystore password is not in the repo either.** `build.sh` takes it from `KSPASS` in the
+environment or from `~/.pi-webview-kspass` (outside the repo), and **fails closed** when neither
+is present — before it deletes anything, so a missing password cannot cost you a build:
+
+```bash
+KSPASS=... ./build.sh              # or once:
+printf %s 'the-password' > ~/.pi-webview-kspass && chmod 600 ~/.pi-webview-kspass
+```
+
+A keystore keeps whatever password it was created with, so if you already have one, that file has
+to contain *that* password rather than a new one.
+
 Android 13+ will ask for **notification permission**: it belongs to the keep-alive foreground
 service, which is what stops the platform freezing the process (see *The freeze problem*).
 `bash ./setup.sh` does all of the above plus the checks, and grants that permission for you.

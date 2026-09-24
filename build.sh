@@ -18,7 +18,21 @@ ANDROID_JAR="$ROOT/sdk/platforms/android-36/android.jar"
 BUILD="$ROOT/build"
 OUT="$ROOT/out"
 KS="$ROOT/keystore.jks"
-KSPASS="android"
+# Signing key password.
+#
+# Deliberately NOT stored in this file, because this file is committed: a hardcoded
+# password here is public the moment the keystore leaks (a home-dir zip, a device
+# backup), and there would be no second factor to fall back on. Provide it either in
+# the environment or in a file outside the repo:
+#
+#   KSPASS=... ./build.sh
+#   printf %s 'the-password' > ~/.pi-webview-kspass && chmod 600 ~/.pi-webview-kspass
+#
+KSFILE="$HOME/.pi-webview-kspass"
+if [ -z "${KSPASS:-}" ] && [ -f "$KSFILE" ]; then
+  KSPASS="$(cat "$KSFILE")"
+fi
+KSPASS="${KSPASS:?set KSPASS in the environment, or create $KSFILE containing it}"
 MIN_SDK=30
 TARGET_SDK=36
 

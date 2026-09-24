@@ -25,6 +25,10 @@ adb install -r out/pi-webview.apk
 adb shell am start -n com.pi.webview/.MainActivity            # optionally --display <id>
 ```
 
+Signing needs the keystore password, which is **deliberately not in the repo**: set `KSPASS` in
+the environment, or keep it in `~/.pi-webview-kspass`. `build.sh` fails closed when neither is
+present (and does so before it removes `build/`/`out/`).
+
 `build.sh` needs `sdk/platforms/android-36/android.jar` (27 MB, not in the repo — `setup.sh`
 fetches it). `keystore.jks` (signing key), `out/`, `build/` are gitignored.
 
