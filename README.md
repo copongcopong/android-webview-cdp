@@ -714,3 +714,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 - The `overlay_display_devices` backend is a **persisted global setting**: it survives a
   reboot until you clear it with `./display.sh overlay-off`.
+
+## License
+
+MIT — see [LICENSE](LICENSE). (Matches the license Pi itself is published under.)
