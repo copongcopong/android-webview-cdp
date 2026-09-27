@@ -210,7 +210,7 @@ else
     if [ "$UP" = yes ]; then
         ok "relay answering on 127.0.0.1:9334 (no adb forward needed)"
         TITLE="$(node cdp.mjs 'document.title' 2>/dev/null | tail -1)"
-        if [ "$TITLE" = "So7o Android WebView Shell" ]; then
+        if [ "$TITLE" = "So7o Android Webview Shell" ]; then
             ok "CDP round-trip: document.title = \"$TITLE\""
             BEFORE="$(node cdp.mjs '__so7o.taps()' 2>/dev/null | tail -1)"
             node cdp.mjs --click 'text=tap me' >/dev/null 2>&1

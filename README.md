@@ -1,4 +1,4 @@
-# So7o Android WebView Shell
+# So7o Android Webview Shell
 
 A 20 KB single-Activity Android app that hosts a **WebView you can drive over the
 Chrome DevTools Protocol from Termux** — plus the Termux-side tooling to do it.
@@ -132,12 +132,12 @@ screenshot. Events arrive on the same socket, and `--repl` puts all of it behind
 
 ```console
 $ DEBUG=1 node cdp.mjs 'console.log("hello from the page")'
-target 0A3E777C6F9F63E4F5258A875C8C8128 — So7o Android WebView Shell — file:///android_asset/index.html
+target 0A3E777C6F9F63E4F5258A875C8C8128 — So7o Android Webview Shell — file:///android_asset/index.html
   [event] Runtime.executionContextCreated
   [log] "hello from the page"
 
 $ node cdp.mjs --repl
-CDP repl — So7o Android WebView Shell; .help for commands, .exit to leave
+CDP repl — So7o Android Webview Shell; .help for commands, .exit to leave
 cdp> 1+1
 2
 ```
@@ -154,7 +154,7 @@ All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e.
 
 **The shell on a virtual display** (1247×1398 px):
 
-![So7o Android WebView Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
+![So7o Android Webview Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
 
 **The same page under `--device pixel-7`** — the page lays out at 412×915 CSS px with touch
 and a mobile UA (scale factor clamped to 1.5 here; see *Phone-sized viewports*):
@@ -328,7 +328,7 @@ Each step has an unambiguous check — useful when an agent is driving:
 | installed | `adb shell pm list packages \| grep app.so7o.webview` | `package:app.so7o.webview` |
 | running | `adb shell pidof app.so7o.webview` | a pid |
 | relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
-| CDP | `node cdp.mjs 'document.title'` | `So7o Android WebView Shell` |
+| CDP | `node cdp.mjs 'document.title'` | `So7o Android Webview Shell` |
 | input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__so7o.taps()'` | counter +1 |
 | real site | `node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 'document.querySelector("h1").textContent'` | `Extensions` |
 | capture | `node cdp.mjs --shot shot.png` | PNG written, non-zero |
@@ -582,7 +582,7 @@ bash ./setup.sh
 
 == launch and verify
   ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
-  ok    CDP round-trip: document.title = "So7o Android WebView Shell"
+  ok    CDP round-trip: document.title = "So7o Android Webview Shell"
   ok    input injection: taps 0 → 1
   ok    real site: pi.dev → extensions ({"h1":"Extensions","path":"/docs/latest/extensions"})
   ok    screenshot: setup-check.png (phone-sized capture of that page)
@@ -813,7 +813,7 @@ adb shell am force-stop app.so7o.webview    # only this stops the app itself
 
 - **Closing the display does not stop the app.** Destroy the display and the Activity goes
   with it, but `KeepAliveService` (the foreground service that makes the process
-  freeze-exempt) outlives it — so the "So7o Android WebView Shell" notification stays up and the relay
+  freeze-exempt) outlives it — so the "So7o Android Webview Shell" notification stays up and the relay
   keeps listening on `127.0.0.1:9334`. That is by design, not a leak; it is what lets you
   drive the shell while it is not the visible app. `status` will show a live `relay UP` with
   `app display` empty — that combination is expected.

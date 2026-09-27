@@ -1,4 +1,4 @@
-# AGENTS.md — So7o Android WebView Shell
+# AGENTS.md — So7o Android Webview Shell
 
 ## What this is
 
