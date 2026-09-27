@@ -10,8 +10,7 @@ case is **mobile browser testing** — you get a real WebView, a real phone view
 input and real pixels, with no desktop emulator and no Chrome-for-Android plumbing in the loop.
 Any CDP client can drive it; `cdp.mjs` and Puppeteer are both verified below.
 
-Source lives at `github.com/jan5o7o/webview-shell`; it takes the So7o name when the public repo
-is created.
+Source lives at `github.com/jan5o7o/android-webview-cdp`.
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
@@ -28,7 +27,7 @@ Termux on the phone, Android 14+ — [*Prerequisites*](#prerequisites-a-fresh-an
 is the long version:
 
 ```bash
-gh repo clone jan5o7o/webview-shell && cd webview-shell
+gh repo clone jan5o7o/android-webview-cdp && cd android-webview-cdp
 bash ./setup.sh --pre-install-checkup     # read-only: says exactly what to fix, if anything
 bash ./setup.sh                           # installs, builds, installs, launches, verifies
 node cdp.mjs --repl                       # drive the page
@@ -386,7 +385,7 @@ one: you can point the same tooling at any WebView/Chrome.
 ## Use
 
 ```bash
-cd ~/webview-shell
+cd ~/android-webview-cdp
 ./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
 adb install -r out/so7o-webview.apk
 adb shell am start -n app.so7o.webview/.MainActivity   # ← starts the relay
@@ -522,7 +521,7 @@ to match the current names.
 ### 1. Get the code
 
 ```bash
-gh repo clone jan5o7o/webview-shell && cd webview-shell
+gh repo clone jan5o7o/android-webview-cdp && cd android-webview-cdp
 ```
 
 ### 2. Pre-install checkup (writes nothing)

@@ -12,7 +12,7 @@
 #
 # Sequence for a fresh phone:
 #   1. Termux (from F-Droid or GitHub releases — the Play Store build is stale)
-#   2. gh repo clone jan5o7o/webview-shell   &&  cd webview-shell
+#   2. gh repo clone jan5o7o/android-webview-cdp   &&  cd android-webview-cdp
 #   3. bash ./setup.sh --pre-install-checkup     # writes nothing; says what to fix
 #   4. bash ./setup.sh                           # then build + install + verify
 #
