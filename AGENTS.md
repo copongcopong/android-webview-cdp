@@ -12,6 +12,74 @@ common use case is **mobile browser testing**: a real WebView at a real phone vi
 touch input and real pixels, driven over CDP by whichever client you like. Any change should
 keep that path — attach, drive, capture — the thing that works.
 
+## Workflow — branches, protection, releases
+
+The repo is **`jan5o7o/android-webview-cdp`** (renamed from `webview-shell`; GitHub redirects the
+old URL). **`dev` is the default branch.**
+
+| Branch | Role | Guarded by |
+|---|---|---|
+| `main` | releases only — what strangers clone | ruleset *main: releases only* |
+| `dev` | integration; all work lands here | ruleset *dev: integration* |
+| `feat/*` `fix/*` `docs/*` | short-lived, PR into `dev` | — |
+
+- **`main` requires a pull request**, forbids deletion and force-push, and requires linear history.
+  Nobody — human or agent — commits to `main` directly; GitHub rejects the push.
+- **`dev`** forbids deletion and force-push. The repository-admin role may bypass, so the owner can
+  still push directly when moving fast.
+- **Agents: branch off `dev`, never `main`.** Run `git fetch origin && git rebase origin/dev`
+  before pushing — the remote is shared and a plain push is often rejected.
+
+### Releases
+
+1. Bump `versionCode` / `versionName` in `AndroidManifest.xml` — they are the source of truth
+   (currently `1` / `0.1`).
+2. PR `dev` → `main` (the ruleset requires the PR), merge.
+3. `git tag -a v0.1.0 -m "…" && git push origin v0.1.0`, tagged on `main`.
+4. `gh release create v0.1.0 out/so7o-webview.apk --title … --notes …` — attach the signed APK.
+
+### Conventions this repo has already learned the hard way
+
+- **Quote output as measured.** The README's transcripts are either re-recorded against the
+  current build or explicitly labelled as past runs. Do not retro-edit a historical transcript to
+  match a rename: saying "this is a slightly edited record" is honest, silently rewriting one is
+  not. When a rename touches a *regex-escaped* form of a package name (e.g. `dev\.so7o\.webview`),
+  a plain string sweep will miss it — grep for the escaped form too.
+- **Keep `## Verification status` honest.** Move a row up only after re-testing it on a device,
+  and say when a row predates a change that would invalidate it.
+
+## Picking the work back up
+
+Nothing here is remembered between sessions, so this is the shortest path from a cold start:
+
+```bash
+bash ./setup.sh --pre-install-checkup   # read-only; says exactly what is missing
+```
+
+**The only step that needs a human** is adb — Developer options → Wireless debugging → *pair with
+a code*. Its gotchas bite every single time:
+
+- The **pairing port and the connect port differ**, and both rotate.
+- `adb pair` against a connect port fails with `protocol fault (couldn't read status message)`.
+- `adb connect` at a port that answers but is not adbd leaves an **`offline` transport** rather
+  than an error — clear it with `adb kill-server` or `adb disconnect <addr>`.
+- **`adb mdns services` does not work** with Termux's `android-tools` build; scan the loopback
+  ephemeral range for the listening port instead.
+- The phone's IP **changes between sessions**; because Termux runs *on* the phone,
+  `127.0.0.1:<port>` sidesteps the churn entirely.
+
+Then:
+
+```bash
+bash ./setup.sh          # build + install + verify (needs adb)
+./display.sh overlay     # phone-sized and off-screen (needs adb)
+node cdp.mjs --repl      # once installed, driving it needs NO adb at all
+```
+
+Because the relay lives on `127.0.0.1:9334`, **driving survives a lost adb session** — only
+install, uninstall and the display work do not. If adb is gone and the app is stopped,
+`am start -n app.so7o.webview/.MainActivity` (termux-am, no adb) brings it and the relay back.
+
 ## Build & install
 
 On a new machine, run the read-only checkup first — it prints what is missing and the exact

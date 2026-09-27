@@ -1007,6 +1007,17 @@ point of the project, so it will not be "fixed". The consequences are worth stat
 - The `overlay_display_devices` backend is a **persisted global setting**: it survives a
   reboot until you clear it with `./display.sh overlay-off`.
 
+## Working on this repo
+
+**`dev` is the default and integration branch; `main` is releases only.** `main` is protected —
+PR required, linear history, no force-push — so nothing lands there except a `dev` → `main` pull
+request. Branch off `dev`, PR back into it, and cut a release by tagging `vX.Y.Z` on `main` with
+the signed APK attached.
+
+[`AGENTS.md`](AGENTS.md) carries the fuller version, including a cold-start checklist for the adb
+connection — the pairing step is the only part that needs a human, and it behaves slightly
+differently every time.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). (Matches the license Pi itself is published under.)
