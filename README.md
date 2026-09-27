@@ -19,11 +19,10 @@ Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 > pre-rebrand build, when the app was `Pi WebView Shell` / `com.pi.webview`. The brand strings
 > in the transcripts have been renamed to the current names for readability, so a line such as
 > `"Android-Package": "app.so7o.webview"` is an *old recording with the name swapped*, not a
-> capture from the current APK. The screenshots still show the old branding outright. Both are
-> re-recorded against `app.so7o.webview` once it is installed — see the banner on
-> [Verified](#verified). Two changes also postdate the recordings: the verification check now
-> targets Hacker News rather than `pi.dev`, and the Screenshots section carries a fresh Hacker
-> News capture.
+> capture from the current APK. The screenshots have since been re-captured on
+> `app.so7o.webview` — see the banner on [Verified](#verified) for what was re-run — but the
+> transcripts have not, and still show the old run with the names swapped in. Two changes also
+> postdate them: the verification check now targets Hacker News rather than `pi.dev`.
 
 ## Quick start
 
@@ -160,15 +159,18 @@ serving. Every step above is adb-free; that one is not.
 ## Screenshots
 
 All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e. the same
-`Page.captureScreenshot` path documented below, not a phone screenshot. They predate the
-rename: the app name and page title visible in them read `Pi WebView Shell`.
+`Page.captureScreenshot` path documented below, not a phone screenshot. The demo-page captures
+are current, taken on `app.so7o.webview`; the external-page ones are from earlier runs against
+other display setups.
 
-**The shell on a virtual display** (1247×1398 px):
+**The shell itself**, at its window's native size (840×1326 device px), showing the bundled demo
+page with the Java bridge answering:
 
-![So7o Android Webview Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
+![So7o Android Webview Shell showing the bundled demo page](docs/img/shell-window.png)
 
-**The same page under `--device pixel-7`** — the page lays out at 412×915 CSS px with touch
-and a mobile UA (scale factor clamped to 1.5 here; see *Phone-sized viewports*):
+**The same page under `--device pixel-7`** — the page lays out at 412×915 CSS px with touch and a
+mobile UA. The scale factor is 1.25 here, picked so the emulated pixels fit the window surface
+(see *Phone-sized viewports*); 515×1144:
 
 ![The demo page laid out at a Pixel 7 viewport](docs/img/phone-viewport-pixel7.png)
 
@@ -885,10 +887,13 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 ## Verified
 
-> **Status after the rename:** every entry below was recorded against the pre-rebrand build
-> (`com.pi.webview`). The package id is now `app.so7o.webview`, which is a *different app* to
-> Android, so these need re-running against the new APK before they can be called verified
-> again — the rename is confirmed at APK level only (package, label, assets, signature).
+> **Status after the rename.** The core path has been re-run against `app.so7o.webview` and
+> holds: `/json/version` reports the new package, `Runtime.evaluate` round-trips, `so7o.ping()`
+> answers `pong from app pid 2076`, `so7o.info()` returns that pid and `127.0.0.1:9334`, a click
+> moves the page's own counter (`0 → 1`), the Hacker News assertion passes
+> (`{"title":"Hacker News","stories":30}`), and `--shot` writes an 840×1326 PNG — all over the
+> in-app relay with **no adb**. The multi-display rows still describe the pre-rename build; they
+> need a second display, hence adb, to re-run.
 
 - Socket name is exactly `webview_devtools_remote_<pid>`, matching the app's own
   `Log.i` line and the name the Java side reports back through CDP.
