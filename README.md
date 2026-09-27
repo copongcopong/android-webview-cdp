@@ -15,6 +15,14 @@ is created.
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
+> **On the recorded output below.** Every transcript and screenshot here was captured on the
+> pre-rebrand build, when the app was `Pi WebView Shell` / `com.pi.webview`. The brand strings
+> in the transcripts have been renamed to the current names for readability, so a line such as
+> `"Android-Package": "app.so7o.webview"` is an *old recording with the name swapped*, not a
+> capture from the current APK. The screenshots still show the old branding outright. Both are
+> re-recorded against `app.so7o.webview` once it is installed — see the banner on
+> [Verified](#verified).
+
 ## Quick start
 
 Termux on the phone, Android 14+ — [*Prerequisites*](#prerequisites-a-fresh-android-device)
@@ -150,7 +158,8 @@ serving. Every step above is adb-free; that one is not.
 ## Screenshots
 
 All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e. the same
-`Page.captureScreenshot` path documented below, not a phone screenshot:
+`Page.captureScreenshot` path documented below, not a phone screenshot. They predate the
+rename: the app name and page title visible in them read `Pi WebView Shell`.
 
 **The shell on a virtual display** (1247×1398 px):
 
@@ -485,7 +494,7 @@ Reading the DOM, clicking a link for real, navigating back to Hacker News, cross
 This is the whole flow as it actually went on a phone that had never seen this repo — a Galaxy
 Z Fold on Android 16 with Termux installed and nothing else. Output is trimmed, but the
 awkward parts are kept on purpose. Nothing but Termux was installed on it, to prove the flow
-stands on its own.
+stands on its own. It ran before the rename, so the names in it are the swapped-in ones.
 
 ### 0. What you need before you start (not scriptable)
 
