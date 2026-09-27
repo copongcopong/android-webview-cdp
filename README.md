@@ -5,6 +5,14 @@ Chrome DevTools Protocol from Termux** — plus the Termux-side tooling to do it
 Built on-device, no Gradle, no Android SDK — a hand-rolled `build.sh`
 (aapt2 → javac → d8 → apksigner).
 
+**What it is for:** an agent/harness WebView for **browser automation on Android**. The common
+case is **mobile browser testing** — you get a real WebView, a real phone viewport, real touch
+input and real pixels, with no desktop emulator and no Chrome-for-Android plumbing in the loop.
+Any CDP client can drive it; `cdp.mjs` and Puppeteer are both verified below.
+
+Source lives at `github.com/jan5o7o/webview-shell`; it takes the So7o name when the public repo
+is created.
+
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
 ## Quick start
@@ -866,6 +874,11 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 `relay already running` instead of a failed re-bind.
 
 ## Verified
+
+> **Status after the rename:** every entry below was recorded against the pre-rebrand build
+> (`com.pi.webview`). The package id is now `dev.so7o.webview`, which is a *different app* to
+> Android, so these need re-running against the new APK before they can be called verified
+> again — the rename is confirmed at APK level only (package, label, assets, signature).
 
 - Socket name is exactly `webview_devtools_remote_<pid>`, matching the app's own
   `Log.i` line and the name the Java side reports back through CDP.

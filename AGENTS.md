@@ -7,6 +7,11 @@ socket is reachable from Termux**, plus the Termux-side tooling to drive it.
 Built on-device with a **hand-rolled build** (`build.sh`) — **no Gradle, no Android
 SDK package, no Kotlin**; the app is plain Java.
 
+Its purpose is to be an **agent/harness WebView for Android browser automation**, and the
+common use case is **mobile browser testing**: a real WebView at a real phone viewport, real
+touch input and real pixels, driven over CDP by whichever client you like. Any change should
+keep that path — attach, drive, capture — the thing that works.
+
 ## Build & install
 
 On a new machine, run the read-only checkup first — it prints what is missing and the exact
