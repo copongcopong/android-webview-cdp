@@ -554,8 +554,8 @@ Not ready. Fix the items above, then re-run: bash ./setup.sh --pre-install-check
 
 Everything about this was harder than it should be, in ways worth knowing:
 
-- The phone **changed networks during the session**, so its IP moved `192.168.1.172` →
-  `10.76.185.111` → `192.168.100.20`. The mDNS records went stale with it: the advertised
+- The phone **changed networks during the session**, so its IP moved three times
+  (`192.168.1.x` → `10.x.x.x` → `192.168.100.x`). The mDNS records went stale with it: the advertised
   **connect ports were refused** while a different port actually answered.
 - **Pairing and connecting use different ports.** Attempting `adb pair` on the connect port
   gives `error: protocol fault (couldn't read status message)` — only the pairing port speaks
@@ -569,16 +569,16 @@ Everything about this was harder than it should be, in ways worth knowing:
 - Because Termux runs *on* the phone, `127.0.0.1:<port>` reaches adbd and sidesteps the
   network churn completely.
 
-So, in practice:
+So, in practice (the device serial and guid below are redacted):
 
 ```bash
 $ python3 ~/adbdiscover.py                     # or any mDNS/zeroconf client
-FOUND adb-RFCTB158WFJ-hNiWLk._adb-tls-pairing._tcp.local.  ['192.168.100.20', …] 37991
-FOUND adb-RFCTB158WFJ-hNiWLk._adb-tls-connect._tcp.local.  ['192.168.100.20', …] 41373
-FOUND adb-RFCTB158WFJ-hNiWLk (3)._adb-tls-connect…         ['192.168.100.20', …] 40855
+FOUND adb-RFCTB1XXXXXX-hNiWLk._adb-tls-pairing._tcp.local.  ['192.168.100.x', …] 37991
+FOUND adb-RFCTB1XXXXXX-hNiWLk._adb-tls-connect._tcp.local.  ['192.168.100.x', …] 41373
+FOUND adb-RFCTB1XXXXXX-hNiWLk (3)._adb-tls-connect…         ['192.168.100.x', …] 40855
 
 $ adb pair 127.0.0.1:37991 460835
-Successfully paired to 127.0.0.1:37991 [guid=adb-RFCTB158WFJ-hNiWLk]
+Successfully paired to 127.0.0.1:37991 [guid=adb-RFCTB1XXXXXX-hNiWLk]
 
 $ adb connect 127.0.0.1:43803                  # the connect port that actually answered
 connected to 127.0.0.1:43803
@@ -942,6 +942,27 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   `so7o.info()` crossed into Java down the same session, and `emulate()` + `screenshot()`
   captured the page at `412x915 @1.5`. `newPage()` fails with
   `Target.createTarget: Not supported`.
+
+## Security
+
+**There is no authentication, and WebView debugging is on unconditionally.** `MainActivity`
+calls `WebView.setWebContentsDebuggingEnabled(true)` with no debug-flag guard — that is the whole
+point of the project, so it will not be "fixed". The consequences are worth stating plainly:
+
+- **Anything that can reach the port can fully drive the page** — read and mutate the DOM, run
+  arbitrary JS, read cookies and `localStorage`, navigate, and call whatever the page's Java
+  bridge exposes.
+- **The Java bridge runs Java in the app's process.** Today `so7o.*` is `ping`/`info`/`toast`,
+  which is harmless. Anything added later (file access, intents, clipboard) inherits exactly the
+  same openness. Keep the bridge small, and never put a secret behind it.
+- **The exposure is the device, not the network.** Both the in-app relay and `adb forward` bind
+  `127.0.0.1` only (verified in `/proc/net/tcp`), so nothing is reachable over the LAN.
+- **On the device, that means every app holding `INTERNET`.** There is no token, no origin check
+  and no per-client allowlist — any app that can open a loopback socket can drive the shell and
+  read the result. Treat a running instance as open to every other app on the phone.
+- **Don't leave it running on a device you care about.** `adb shell am force-stop
+  app.so7o.webview` stops everything — process, notification and port. `./cdp-webview.sh down`
+  only removes the adb forward; it does not stop the app.
 
 ## Gotchas
 
