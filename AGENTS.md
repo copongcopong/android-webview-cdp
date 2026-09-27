@@ -37,6 +37,17 @@ old URL). **`dev` is the default branch.**
 2. PR `dev` → `main` (the ruleset requires the PR), merge.
 3. `git tag -a v0.1.0 -m "…" && git push origin v0.1.0`, tagged on `main`.
 4. `gh release create v0.1.0 out/so7o-webview.apk --title … --notes …` — attach the signed APK.
+5. **Re-align `dev`.** A rebase or squash merge mints a *new* commit, so `main` and `dev` diverge
+   by SHA even though the trees are identical. Point `dev` back at the release:
+
+   ```bash
+   git checkout dev && git reset --hard origin/main
+   git push --force-with-lease origin dev
+   ```
+
+   `dev` carries no PR requirement and the admin role bypasses `non_fast_forward`, so this is
+   allowed. **Check `git log origin/main..dev` first** — a force-push here discards anything on
+   `dev` that has not reached `main` yet.
 
 ### Conventions this repo has already learned the hard way
 
