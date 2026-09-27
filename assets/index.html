@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pi WebView Shell</title>
+<title>So7o Android WebView Shell</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; padding:24px; font:15px/1.5 -apple-system,Roboto,sans-serif;
@@ -23,7 +23,7 @@
 </style>
 </head>
 <body>
-  <h1>Pi WebView Shell</h1>
+  <h1>So7o Android WebView Shell</h1>
   <div class="sub">loaded from <code>file:///android_asset/index.html</code>
     &nbsp;<span class="tag" id="dbg">debug socket on</span></div>
 
@@ -38,7 +38,7 @@
   </div>
 
   <div class="card">
-    <div class="k">app bridge (pi.ping())</div>
+    <div class="k">app bridge (so7o.ping())</div>
     <div class="v" id="bridge">—</div>
   </div>
 
@@ -54,7 +54,7 @@
   }
 
   // A stable handle for Runtime.evaluate from CDP.
-  window.__pi = {
+  window.__so7o = {
     shell: 'webview-shell',
     taps: function () { return n; },
     say: function (msg) {
@@ -65,7 +65,7 @@
   };
 
   document.getElementById('bridge').textContent =
-      (typeof pi !== 'undefined' && pi.ping) ? pi.ping() : '(no bridge)';
+      (typeof so7o !== 'undefined' && so7o.ping) ? so7o.ping() : '(no bridge)';
   console.log('webview-shell ready, title=' + document.title);
 </script>
 </body>

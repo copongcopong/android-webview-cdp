@@ -1,4 +1,4 @@
-package com.pi.webview;
+package dev.so7o.webview;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -23,7 +23,7 @@ import android.widget.Toast;
  */
 public class MainActivity extends Activity {
 
-    private static final String TAG = "PiWebView";
+    private static final String TAG = "So7oWebView";
     private WebView web;
 
     @Override
@@ -48,7 +48,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         web.setWebViewClient(new WebViewClient());
-        web.addJavascriptInterface(new Bridge(), "pi");
+        web.addJavascriptInterface(new Bridge(), "so7o");
         web.loadUrl("file:///android_asset/index.html");
 
         // Publish the DevTools socket on 127.0.0.1 so clients can skip adb forward.

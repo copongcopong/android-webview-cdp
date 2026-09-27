@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Drive the Pi WebView shell over the Chrome DevTools Protocol.
+// Drive the So7o Android WebView shell over the Chrome DevTools Protocol.
 // No dependencies — Node 22+ ships a global WebSocket.
 //
 //   node cdp.mjs '<js expression>'          evaluate in the page (default action)

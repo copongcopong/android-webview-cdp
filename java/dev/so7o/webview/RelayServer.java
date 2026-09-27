@@ -1,4 +1,4 @@
-package com.pi.webview;
+package dev.so7o.webview;
 
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
@@ -26,7 +26,7 @@ import java.net.Socket;
  */
 public class RelayServer {
 
-    private static final String TAG = "PiWebViewRelay";
+    private static final String TAG = "So7oWebViewRelay";
     public static final int PORT = 9334;
 
     /** The relay belongs to the process, not the Activity — onCreate can run
@@ -48,7 +48,7 @@ public class RelayServer {
             public void run() {
                 acceptLoop();
             }
-        }, "pi-relay-accept");
+        }, "so7o-relay-accept");
         acceptor.setDaemon(true);
         acceptor.start();
     }
@@ -66,7 +66,7 @@ public class RelayServer {
                     public void run() {
                         pipe(client);
                     }
-                }, "pi-relay-conn");
+                }, "so7o-relay-conn");
                 conn.setDaemon(true);
                 conn.start();
             }
@@ -98,7 +98,7 @@ public class RelayServer {
                 public void run() {
                     pump(localIn, clientOut, client);
                 }
-            }, "pi-relay-back");
+            }, "so7o-relay-back");
             back.setDaemon(true);
             back.start();
 

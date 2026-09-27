@@ -26,9 +26,9 @@ KS="$ROOT/keystore.jks"
 # the environment or in a file outside the repo:
 #
 #   KSPASS=... ./build.sh
-#   printf %s 'the-password' > ~/.pi-webview-kspass && chmod 600 ~/.pi-webview-kspass
+#   printf %s 'the-password' > ~/.so7o-webview-kspass && chmod 600 ~/.so7o-webview-kspass
 #
-KSFILE="$HOME/.pi-webview-kspass"
+KSFILE="$HOME/.so7o-webview-kspass"
 if [ -z "${KSPASS:-}" ] && [ -f "$KSFILE" ]; then
   KSPASS="$(cat "$KSFILE")"
 fi
@@ -63,18 +63,18 @@ javac \
   -nowarn \
   -d "$BUILD/classes" \
   @"$BUILD/sources.txt" 2>&1 | grep -viE "bootstrap class path|source value 8|target value 8|deprecat" || true
-[ -d "$BUILD/classes/com/pi/webview" ] || { echo "javac produced no classes"; exit 1; }
+[ -d "$BUILD/classes/dev/so7o/webview" ] || { echo "javac produced no classes"; exit 1; }
 
 echo "==> 4/5 d8"
 find "$BUILD/classes" -name '*.class' > "$BUILD/inputs.txt"
 d8 --lib "$ANDROID_JAR" --min-api "$MIN_SDK" --output "$BUILD/dex" @"$BUILD/inputs.txt"
 
-cp "$BUILD/base.apk" "$OUT/pi-webview-unsigned.apk"
-cd "$BUILD/dex" && zip -q -X "$OUT/pi-webview-unsigned.apk" classes.dex
+cp "$BUILD/base.apk" "$OUT/so7o-webview-unsigned.apk"
+cd "$BUILD/dex" && zip -q -X "$OUT/so7o-webview-unsigned.apk" classes.dex
 cd "$ROOT"
 
 echo "==> 4b/5 alignment report"
-python3 - "$OUT/pi-webview-unsigned.apk" <<'PY'
+python3 - "$OUT/so7o-webview-unsigned.apk" <<'PY'
 import sys, zipfile, struct
 p = sys.argv[1]
 z = zipfile.ZipFile(p)
@@ -100,15 +100,15 @@ PY
 echo "==> 5/5 sign"
 if [ ! -f "$KS" ]; then
   keytool -genkeypair -v -keystore "$KS" -storepass "$KSPASS" -keypass "$KSPASS" \
-    -alias pi -keyalg RSA -keysize 2048 -validity 10000 \
-    -dname "CN=Pi WebView, OU=dev, O=local, L=., S=., C=US" >/dev/null 2>&1
+    -alias so7o -keyalg RSA -keysize 2048 -validity 10000 \
+    -dname "CN=So7o Android WebView, OU=dev, O=local, L=., S=., C=US" >/dev/null 2>&1
   echo "    generated $KS"
 fi
 apksigner sign \
   --ks "$KS" --ks-pass "pass:$KSPASS" --key-pass "pass:$KSPASS" \
   --v1-signing-enabled true --v2-signing-enabled true \
-  --out "$OUT/pi-webview.apk" "$OUT/pi-webview-unsigned.apk"
+  --out "$OUT/so7o-webview.apk" "$OUT/so7o-webview-unsigned.apk"
 
-apksigner verify --print-certs "$OUT/pi-webview.apk" | head -4
+apksigner verify --print-certs "$OUT/so7o-webview.apk" | head -4
 echo
-echo "APK: $OUT/pi-webview.apk  ($(du -h "$OUT/pi-webview.apk" | cut -f1))"
+echo "APK: $OUT/so7o-webview.apk  ($(du -h "$OUT/so7o-webview.apk" | cut -f1))"

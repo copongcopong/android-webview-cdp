@@ -1,4 +1,4 @@
-# Pi WebView Shell
+# So7o Android WebView Shell
 
 A 20 KB single-Activity Android app that hosts a **WebView you can drive over the
 Chrome DevTools Protocol from Termux** — plus the Termux-side tooling to do it.
@@ -59,7 +59,7 @@ The first check is what is on the other end of the port:
 ```console
 $ curl -s 127.0.0.1:9334/json/version
 {
-   "Android-Package": "com.pi.webview",
+   "Android-Package": "dev.so7o.webview",
    "Browser": "Chrome/153.0.8010.36",
    "Protocol-Version": "1.3",
    "User-Agent": "Mozilla/5.0 (Linux; Android 16; SM-F936B …; wv) …",
@@ -72,13 +72,13 @@ only the Java side can know, which is the part that proves the bridge:
 
 ```console
 $ node cdp.mjs 'JSON.stringify({url:location.href, viewport:innerWidth+"x"+innerHeight,
-    dpr:devicePixelRatio, ping:pi.ping(), info:pi.info()})'
+    dpr:devicePixelRatio, ping:so7o.ping(), info:so7o.info()})'
 {"url":"file:///android_asset/index.html","viewport":"805x967","dpr":2.25,
  "ping":"pong from app pid 3389 at 1790507158923",
  "info":"{\"pid\":3389,\"socket\":\"webview_devtools_remote_3389\",…}"}
 ```
 
-`pi.info()` is a `@JavascriptInterface` method, so `pid 3389` came out of `Process.myPid()` on
+`so7o.info()` is a `@JavascriptInterface` method, so `pid 3389` came out of `Process.myPid()` on
 the Java side and made the round trip JS → Java → CDP → Termux. `805x967` at dpr 2.25 is this
 device's unfolded inner screen.
 
@@ -95,7 +95,7 @@ typed "typed by CDP from Termux"
 The bridge runs the other direction too — page JS reaching Android:
 
 ```console
-$ node cdp.mjs 'pi.toast("Hello from CDP — sent by node in Termux")'
+$ node cdp.mjs 'so7o.toast("Hello from CDP — sent by node in Termux")'
 toast sent
 ```
 
@@ -124,12 +124,12 @@ screenshot. Events arrive on the same socket, and `--repl` puts all of it behind
 
 ```console
 $ DEBUG=1 node cdp.mjs 'console.log("hello from the page")'
-target 0A3E777C6F9F63E4F5258A875C8C8128 — Pi WebView Shell — file:///android_asset/index.html
+target 0A3E777C6F9F63E4F5258A875C8C8128 — So7o Android WebView Shell — file:///android_asset/index.html
   [event] Runtime.executionContextCreated
   [log] "hello from the page"
 
 $ node cdp.mjs --repl
-CDP repl — Pi WebView Shell; .help for commands, .exit to leave
+CDP repl — So7o Android WebView Shell; .help for commands, .exit to leave
 cdp> 1+1
 2
 ```
@@ -146,7 +146,7 @@ All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e.
 
 **The shell on a virtual display** (1247×1398 px):
 
-![Pi WebView Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
+![So7o Android WebView Shell running on a virtual display, showing the bundled demo page](docs/img/shell-on-display.png)
 
 **The same page under `--device pixel-7`** — the page lays out at 412×915 CSS px with touch
 and a mobile UA (scale factor clamped to 1.5 here; see *Phone-sized viewports*):
@@ -289,18 +289,18 @@ repo** — `build.sh` generates `keystore.jks` on first use — so Android refus
 installed from someone else's build:
 
 ```bash
-adb uninstall com.pi.webview        # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
+adb uninstall dev.so7o.webview        # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
 ```
 
 Uninstalling costs nothing here (the app stores no data).
 
 **2. The keystore password is not in the repo either.** `build.sh` takes it from `KSPASS` in the
-environment or from `~/.pi-webview-kspass`, and **fails closed** when neither is present — before
+environment or from `~/.so7o-webview-kspass`, and **fails closed** when neither is present — before
 it deletes anything, so a missing password cannot cost you a build:
 
 ```bash
 KSPASS=... ./build.sh               # or once:
-printf %s 'the-password' > ~/.pi-webview-kspass && chmod 600 ~/.pi-webview-kspass
+printf %s 'the-password' > ~/.so7o-webview-kspass && chmod 600 ~/.so7o-webview-kspass
 ```
 
 A keystore keeps whatever password it was created with, so with an existing `keystore.jks` that
@@ -316,12 +316,12 @@ Each step has an unambiguous check — useful when an agent is driving:
 
 | step | check | expected |
 |---|---|---|
-| build | `ls -l out/pi-webview.apk` | ~20 KB file |
-| installed | `adb shell pm list packages \| grep com.pi.webview` | `package:com.pi.webview` |
-| running | `adb shell pidof com.pi.webview` | a pid |
+| build | `ls -l out/so7o-webview.apk` | ~20 KB file |
+| installed | `adb shell pm list packages \| grep dev.so7o.webview` | `package:dev.so7o.webview` |
+| running | `adb shell pidof dev.so7o.webview` | a pid |
 | relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
-| CDP | `node cdp.mjs 'document.title'` | `Pi WebView Shell` |
-| input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__pi.taps()'` | counter +1 |
+| CDP | `node cdp.mjs 'document.title'` | `So7o Android WebView Shell` |
+| input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__so7o.taps()'` | counter +1 |
 | real site | `node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 'document.querySelector("h1").textContent'` | `Extensions` |
 | capture | `node cdp.mjs --shot shot.png` | PNG written, non-zero |
 | off-screen | `./display.sh overlay` | a display id and `411x851` CSS |
@@ -348,7 +348,7 @@ Clone with `gh repo clone` or plain `git clone` (a private repo would also need 
 |---|---|---|---|
 | **Transport** | `adb forward tcp:9333 localabstract:…` | reach the socket at all | adb (already connected to itself) |
 | **Page** | CDP over the forwarded port | DOM/CSS/JS, real mouse + key input, navigation, network, screenshots, console | nothing in the app |
-| **App** | `@JavascriptInterface` bridge (`pi.*`), driven *through* CDP | anything the Java side exposes: Android APIs, app state | rebuild the app |
+| **App** | `@JavascriptInterface` bridge (`so7o.*`), driven *through* CDP | anything the Java side exposes: Android APIs, app state | rebuild the app |
 
 CDP is the only layer that needs no app cooperation, which is why it's the useful
 one: you can point the same tooling at any WebView/Chrome.
@@ -358,8 +358,8 @@ one: you can point the same tooling at any WebView/Chrome.
 ```bash
 cd ~/webview-shell
 ./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
-adb install -r out/pi-webview.apk
-adb shell am start -n com.pi.webview/.MainActivity   # ← starts the relay
+adb install -r out/so7o-webview.apk
+adb shell am start -n dev.so7o.webview/.MainActivity   # ← starts the relay
 
 node cdp.mjs 'document.title'               # evaluate in the page
 node cdp.mjs --click 'button'               # real mouse input (or --click 'text=tap me')
@@ -369,7 +369,7 @@ node cdp.mjs --nav https://example.com      # navigate + wait for load
 node cdp.mjs --wait '#ready'                # poll for a selector
 node cdp.mjs --shot page.png                # screenshot the page
 node cdp.mjs --repl                         # interactive: .help .click .nav .shot .exit
-node cdp.mjs 'pi.info()'                    # cross into the Android layer
+node cdp.mjs 'so7o.info()'                    # cross into the Android layer
 ```
 
 Actions run in a fixed order (`nav → wait → click → type → key → expression → shot`),
@@ -413,7 +413,7 @@ for (const p of pages)
 await page.goto('https://news.ycombinator.com/news', { waitUntil: 'domcontentloaded' });
 await page.$$eval('.titleline > a', (as) => as.slice(0, 5).map((a) => a.textContent.trim()));
 await page.click('.titleline > a');        // real Input.dispatchMouseEvent
-await page.evaluate(() => pi.info());      // the Java bridge, same session
+await page.evaluate(() => so7o.info());      // the Java bridge, same session
 await browser.disconnect();
 ```
 
@@ -441,7 +441,7 @@ DONE
 ```
 
 Reading the DOM, clicking a link for real, navigating back to Hacker News, crossing into Java with
-`pi.info()`, and capturing pixels all work through puppeteer with no app changes. The page at
+`so7o.info()`, and capturing pixels all work through puppeteer with no app changes. The page at
 `412x915 @1.5` (the scale that fits this window):
 
 ![Hacker News front page at a phone viewport, driven and captured by puppeteer](docs/img/hn-puppeteer-phone.png)
@@ -466,7 +466,7 @@ Reading the DOM, clicking a link for real, navigating back to Hacker News, cross
   such as `example.com` hides the repeat because its content ends before the seam. Keep the
   emulated pixels inside the surface (this window holds 1080x1652 device px, so `412x915 @1.5` =
   618x1373 is safe and `@2` = 824x1830 is not), or keep using `cdp.mjs --shot`, which clamps.
-- **A backgrounded app hangs CDP** (frozen cgroup) — `am start -n com.pi.webview/.MainActivity`
+- **A backgrounded app hangs CDP** (frozen cgroup) — `am start -n dev.so7o.webview/.MainActivity`
   unfreezes it before you connect.
 
 ## A real run, start to finish
@@ -574,14 +574,14 @@ bash ./setup.sh
 
 == launch and verify
   ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
-  ok    CDP round-trip: document.title = "Pi WebView Shell"
+  ok    CDP round-trip: document.title = "So7o Android WebView Shell"
   ok    input injection: taps 0 → 1
   ok    real site: pi.dev → extensions ({"h1":"Extensions","path":"/docs/latest/extensions"})
   ok    screenshot: setup-check.png (phone-sized capture of that page)
 ```
 
 The signature warning is expected on a fresh clone and handled automatically: no signing key is
-committed, so `build.sh` generated one (`CN=Pi WebView`) and Android refused to update the
+committed, so `build.sh` generated one (`CN=So7o Android WebView`) and Android refused to update the
 app installed from a different key — hence uninstall + reinstall.
 
 Two lines there are worth explaining. **`real site: pi.dev → extensions`** is the flow
@@ -624,10 +624,10 @@ else's site.)
 
 | File | Role |
 |---|---|
-| `java/com/pi/webview/MainActivity.java` | debug flag, WebView, `pi` JS bridge (`ping`/`info`/`toast`) |
-| `java/com/pi/webview/KeepAliveService.java` | foreground service — keeps the process out of the frozen cgroup |
-| `java/com/pi/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) |
-| `assets/index.html` | demo page; exposes `window.__pi` as a stable CDP handle |
+| `java/dev/so7o/webview/MainActivity.java` | debug flag, WebView, `so7o` JS bridge (`ping`/`info`/`toast`) |
+| `java/dev/so7o/webview/KeepAliveService.java` | foreground service — keeps the process out of the frozen cgroup |
+| `java/dev/so7o/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) |
+| `assets/index.html` | demo page; exposes `window.__so7o` as a stable CDP handle |
 | `build.sh` | on-device build: aapt2 → javac → d8 → alignment check → apksigner |
 | `cdp-webview.sh` | pid discovery, freeze handling, `adb forward`, verification |
 | `cdp.mjs` | dependency-free CDP client/CLI (Node 22+ global `WebSocket`) |
@@ -682,7 +682,7 @@ frame, no screenshot. Read the dependencies that way:
 So the minimum is three commands, and only the first two need adb:
 
 ```bash
-adb install -r out/pi-webview.apk
+adb install -r out/so7o-webview.apk
 ./display.sh overlay              # settings put + force-stop + am start --display + task resize
 node cdp.mjs --shot shot.png      # 1082×2237, over the relay, zero adb
 ```
@@ -730,7 +730,7 @@ the force-stop and the unconditional `am task resize` exist to handle.
 If a device does not fill the display, the knob is an explicit fullscreen launch:
 
 ```bash
-adb shell am start --display <id> --windowingMode 1 -f 0x10000000 -n com.pi.webview/.MainActivity
+adb shell am start --display <id> --windowingMode 1 -f 0x10000000 -n dev.so7o.webview/.MainActivity
 ```
 
 and if it refuses the simulated display entirely, falling back to its own screen keeps everything
@@ -800,12 +800,12 @@ Measured, unusual, and worth knowing before you wonder why something is still ru
 ```bash
 ./display.sh overlay-off                  # delete the persisted setting, app back to the phone
 ./cdp-webview.sh down                     # remove the 9333 adb forward, if you used that path
-adb shell am force-stop com.pi.webview    # only this stops the app itself
+adb shell am force-stop dev.so7o.webview    # only this stops the app itself
 ```
 
 - **Closing the display does not stop the app.** Destroy the display and the Activity goes
   with it, but `KeepAliveService` (the foreground service that makes the process
-  freeze-exempt) outlives it — so the "Pi WebView Shell" notification stays up and the relay
+  freeze-exempt) outlives it — so the "So7o Android WebView Shell" notification stays up and the relay
   keeps listening on `127.0.0.1:9334`. That is by design, not a leak; it is what lets you
   drive the shell while it is not the visible app. `status` will show a live `relay UP` with
   `app display` empty — that combination is expected.
@@ -834,7 +834,7 @@ curl 127.0.0.1:9333/json/version → 000   (process alive, Forward in place)
 the process freeze-exempt. With it running:
 
 - after **4 minutes** in the background: `cgroup unfrozen`, HTTP 200, CDP evaluating;
-- `adb shell am freeze com.pi.webview` was requested explicitly — the app kept
+- `adb shell am freeze dev.so7o.webview` was requested explicitly — the app kept
   answering CDP (`isFrozen` never became true).
 
 `./cdp-webview.sh up` also calls `am start` unconditionally, which both launches a
@@ -857,7 +857,7 @@ With the relay, `adb forward --list` is empty and CDP still answers:
 ```
 ./cdp-webview.sh direct
 relay UP on 127.0.0.1:9334 (no adb forward involved)
-  com.pi.webview — Chrome/153.0.8010.36
+  dev.so7o.webview — Chrome/153.0.8010.36
 ```
 
 So once the app is running, **control needs no adb at all** — wireless debugging
@@ -869,7 +869,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 - Socket name is exactly `webview_devtools_remote_<pid>`, matching the app's own
   `Log.i` line and the name the Java side reports back through CDP.
-- `/json/version` → `Android-Package: com.pi.webview`, `Browser: Chrome/153`,
+- `/json/version` → `Android-Package: dev.so7o.webview`, `Browser: Chrome/153`,
   UA marked `; wv`; `/json/list` → the page target.
 - `Runtime.evaluate` round-trips; `Page.captureScreenshot` renders the page.
 - **Input works without a finger**: `Input.dispatchMouseEvent` clicks a button and
@@ -879,8 +879,8 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   bundled asset page.
 - `Network.enable` produces `Network.requestWillBeSent`; `DOM`, `CSS`, `Network.getCookies`
   respond.
-- **CDP → Java**: `pi.info()` returns `{"pid":17493,"socket":"webview_devtools_remote_17493"}`,
-  matching `adb shell pidof com.pi.webview` exactly. The bridge really crosses processes.
+- **CDP → Java**: `so7o.info()` returns `{"pid":17493,"socket":"webview_devtools_remote_17493"}`,
+  matching `adb shell pidof dev.so7o.webview` exactly. The bridge really crosses processes.
 - A page left alone with no interaction stays at 0 taps — input only moves when
   something injects or taps it.
 - **Relay works with no adb**: `adb forward --list` empty, CDP answering on
@@ -898,7 +898,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 - **Puppeteer drives it too**, over the relay and with no app changes: `puppeteer-core`
   `connect` → `pages()` → `goto` → DOM reads → a real click → `goBack`, all against
   `news.ycombinator.com/news` (30 stories read; story #1 clicked through to arxiv).
-  `pi.info()` crossed into Java down the same session, and `emulate()` + `screenshot()`
+  `so7o.info()` crossed into Java down the same session, and `emulate()` + `screenshot()`
   captured the page at `412x915 @1.5`. `newPage()` fails with
   `Target.createTarget: Not supported`.
 
@@ -925,7 +925,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 - **No surface, or a `hidden` page, means no pixels.** A display without a render target, or a
   window that has stopped rendering, produces no frames — every capture route times out. See
   *What a screenshot actually requires*.
-- **A backgrounded app cannot show a Toast** (Android 11+). `pi.toast()` still
+- **A backgrounded app cannot show a Toast** (Android 11+). `so7o.toast()` still
   executes Java, but nothing appears unless the app is foreground or holds
   `SYSTEM_ALERT_WINDOW`.
 - **`Target.createTarget` / `/json/new` are blocked on Android** — attach to an

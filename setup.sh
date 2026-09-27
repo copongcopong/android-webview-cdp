@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # setup.sh — take a fresh Android phone + Termux from nothing to a verified, working
-# pi-webview-shell. Idempotent: safe to run again at any time.
+# so7o-android-webview-shell. Idempotent: safe to run again at any time.
 #
 #   bash ./setup.sh --pre-install-checkup   READ-ONLY: reports what is missing and what to do
 #   bash ./setup.sh                        install what is missing, build, install, verify
@@ -27,7 +27,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-PKG=com.pi.webview
+PKG=dev.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 JAR_REL="sdk/platforms/android-36/android.jar"
 JAR_URL="https://dl.google.com/android/repository/platform-36_r02.zip"
@@ -126,7 +126,7 @@ fi
 
 # ---------------------------------------------------------------- 4. signing password
 step "keystore password"
-KSFILE="$HOME/.pi-webview-kspass"
+KSFILE="$HOME/.so7o-webview-kspass"
 if [ -n "${KSPASS:-}" ]; then
     ok "KSPASS set in the environment"
 elif [ -f "$KSFILE" ]; then
@@ -163,7 +163,7 @@ step "build"
 if [ "$MODE" = check ]; then
     info "skipped (--check)"
 elif bash build.sh; then
-    ok "out/pi-webview.apk ($(du -h out/pi-webview.apk | cut -f1))"
+    ok "out/so7o-webview.apk ($(du -h out/so7o-webview.apk | cut -f1))"
 else
     bad "build.sh failed — see the output above"
 fi
@@ -177,14 +177,14 @@ if [ "$MODE" = check ]; then
 elif ! "$ADB" devices 2>/dev/null | awk 'NR>1 && $2=="device"' | grep -q .; then
     bad "no device — cannot install"
 else
-    OUT="$("$ADB" install -r out/pi-webview.apk 2>&1)"
+    OUT="$("$ADB" install -r out/so7o-webview.apk 2>&1)"
     if printf '%s' "$OUT" | grep -q "Success"; then
         ok "installed"
     elif printf '%s' "$OUT" | grep -qiE "UPDATE_INCOMPATIBLE|signatures do not match"; then
         # fresh checkout ⇒ fresh signing key ⇒ cannot update someone else's build
         warn "signed differently from the installed copy (no keystore is committed) — uninstalling and reinstalling"
         "$ADB" uninstall "$PKG" >/dev/null 2>&1
-        OUT="$("$ADB" install -r out/pi-webview.apk 2>&1)"
+        OUT="$("$ADB" install -r out/so7o-webview.apk 2>&1)"
         printf '%s' "$OUT" | grep -q "Success" && ok "installed (after uninstall)" || bad "install failed: $OUT"
     else
         bad "install failed: $OUT"
@@ -210,11 +210,11 @@ else
     if [ "$UP" = yes ]; then
         ok "relay answering on 127.0.0.1:9334 (no adb forward needed)"
         TITLE="$(node cdp.mjs 'document.title' 2>/dev/null | tail -1)"
-        if [ "$TITLE" = "Pi WebView Shell" ]; then
+        if [ "$TITLE" = "So7o Android WebView Shell" ]; then
             ok "CDP round-trip: document.title = \"$TITLE\""
-            BEFORE="$(node cdp.mjs '__pi.taps()' 2>/dev/null | tail -1)"
+            BEFORE="$(node cdp.mjs '__so7o.taps()' 2>/dev/null | tail -1)"
             node cdp.mjs --click 'text=tap me' >/dev/null 2>&1
-            AFTER="$(node cdp.mjs '__pi.taps()' 2>/dev/null | tail -1)"
+            AFTER="$(node cdp.mjs '__so7o.taps()' 2>/dev/null | tail -1)"
             if [ -n "$BEFORE" ] && [ -n "$AFTER" ] && [ "$AFTER" -eq "$((BEFORE + 1))" ] 2>/dev/null; then
                 ok "input injection: taps $BEFORE → $AFTER"
             else
@@ -246,7 +246,7 @@ else
             bad "CDP answered but document.title was '$TITLE'"
         fi
     else
-        bad "relay not answering — is the app running? adb logcat -s PiWebViewRelay"
+        bad "relay not answering — is the app running? adb logcat -s So7oWebViewRelay"
     fi
 fi
 

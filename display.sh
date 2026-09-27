@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Put pi-webview-shell on a secondary display, off the phone screen.
+# Put so7o-android-webview-shell on a secondary display, off the phone screen.
 #
 #   ./display.sh overlay [WxH@DPI]   create a simulated secondary display (adb only),
 #                                    launch the shell there, size it to fill it
@@ -29,14 +29,14 @@
 # The setting is persisted: the display is recreated after a reboot until you clear it.
 set -euo pipefail
 
-PKG=com.pi.webview
+PKG=dev.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 OVERLAY_SPEC="${OVERLAY_SPEC:-1080x2340/420}"
 ADB="${ADB:-adb}"
 
 display_of_app() {
     $ADB shell dumpsys activity activities 2>/dev/null \
-        | awk '/Display #/{d=$2} /com\.pi\.webview\/\.MainActivity/{print d; exit}'
+        | awk '/Display #/{d=$2} /dev\.so7o\.webview\/\.MainActivity/{print d; exit}'
 }
 relay_up() {
     [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:9334/json/version 2>/dev/null || true)" = "200" ]
@@ -49,7 +49,7 @@ all_ids() { $ADB shell dumpsys display 2>/dev/null | grep -oE 'mDisplayId=[0-9]+
 task_on_display() {
     $ADB shell dumpsys activity activities 2>/dev/null | awk -v want="#$1" '
         /Display #/ { cur = $2 }
-        cur == want && /com\.pi\.webview\/\.MainActivity/ {
+        cur == want && /dev\.so7o\.webview\/\.MainActivity/ {
             if (match($0, /t[0-9]+/)) { print substr($0, RSTART + 1, RLENGTH - 1); exit }
         }'
 }

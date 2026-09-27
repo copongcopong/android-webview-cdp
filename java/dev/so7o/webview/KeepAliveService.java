@@ -1,4 +1,4 @@
-package com.pi.webview;
+package dev.so7o.webview;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -21,7 +21,7 @@ import android.os.IBinder;
  */
 public class KeepAliveService extends Service {
 
-    private static final String CHANNEL = "pi-webview-keepalive";
+    private static final String CHANNEL = "so7o-webview-keepalive";
     private static final int NOTIFICATION_ID = 1;
 
     @Override
@@ -40,7 +40,7 @@ public class KeepAliveService extends Service {
         nm.createNotificationChannel(channel);
 
         Notification n = new Notification.Builder(this, CHANNEL)
-                .setContentTitle("Pi WebView Shell")
+                .setContentTitle("So7o Shell")
                 .setContentText("CDP reachable · pid " + android.os.Process.myPid())
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)

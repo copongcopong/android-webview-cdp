@@ -1,4 +1,4 @@
-# AGENTS.md — Pi WebView Shell
+# AGENTS.md — So7o Android WebView Shell
 
 ## What this is
 
@@ -21,12 +21,12 @@ By hand, the same thing is:
 
 ```bash
 ./build.sh                       # aapt2 -> javac -> d8 -> alignment check -> apksigner
-adb install -r out/pi-webview.apk
-adb shell am start -n com.pi.webview/.MainActivity            # optionally --display <id>
+adb install -r out/so7o-webview.apk
+adb shell am start -n dev.so7o.webview/.MainActivity            # optionally --display <id>
 ```
 
 Signing needs the keystore password, which is **deliberately not in the repo**: set `KSPASS` in
-the environment, or keep it in `~/.pi-webview-kspass`. `build.sh` fails closed when neither is
+the environment, or keep it in `~/.so7o-webview-kspass`. `build.sh` fails closed when neither is
 present (and does so before it removes `build/`/`out/`).
 
 `build.sh` needs `sdk/platforms/android-36/android.jar` (27 MB, not in the repo — `setup.sh`
@@ -41,7 +41,7 @@ Two traps for a fresh checkout:
 
 - **No signing key is committed.** `build.sh` generates `keystore.jks` on first use, so a fresh
   clone signs with a new key and Android will refuse to update an app installed from someone
-  else's build: `adb uninstall com.pi.webview` first (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+  else's build: `adb uninstall dev.so7o.webview` first (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
   otherwise).
 - **Off-device (laptop + USB phone):** run the scripts as `bash build.sh` — their shebangs are
   absolute Termux paths — and reach the relay with `adb forward tcp:9334 tcp:9334`, which
@@ -51,10 +51,10 @@ Two traps for a fresh checkout:
 
 | File | Role |
 |---|---|
-| `java/.../MainActivity.java` | debug flag, WebView, `pi` JS bridge (`ping`/`info`/`toast`) |
+| `java/.../MainActivity.java` | debug flag, WebView, `so7o` JS bridge (`ping`/`info`/`toast`) |
 | `java/.../RelayServer.java` | byte-pumps the app's own DevTools socket to `127.0.0.1:9334` |
 | `java/.../KeepAliveService.java` | `specialUse` foreground service — keeps the process out of the frozen cgroup |
-| `assets/index.html` | demo page; exposes `window.__pi` as a stable CDP handle |
+| `assets/index.html` | demo page; exposes `window.__so7o` as a stable CDP handle |
 | `build.sh` | the hand-rolled build pipeline |
 | `cdp-webview.sh` | `up` / `direct` / `status` / `info` / `down` |
 | `cdp.mjs` | dependency-free CDP client (Node 22+ global `WebSocket`), incl. `--device` profiles |
@@ -123,7 +123,7 @@ Six things that will bite:
   Activity, so the FGS notification stays and the relay keeps listening on 9334. `status`
   showing `relay UP` with an empty `app display` is correct, not a bug — don't "fix" it by
   tying the relay to the Activity lifecycle.
-- Only `adb shell am force-stop com.pi.webview` stops everything (process, notification, port).
+- Only `adb shell am force-stop dev.so7o.webview` stops everything (process, notification, port).
 
 ## Known behaviours / gotchas
 
@@ -148,7 +148,7 @@ rows up without re-testing.
 **Verified:** socket name; `/json/version` package identity; `Runtime.evaluate`;
 `Input.dispatchMouseEvent`/`insertText`/`dispatchKeyEvent`; `Page.navigate` to external
 sites; `Network.*` events; `Page.captureScreenshot`; relay on 9334 with an empty
-`adb forward` table; the Java bridge crossing (`pi.info()` matched `pidof`); running on
+`adb forward` table; the Java bridge crossing (`so7o.info()` matched `pidof`); running on
 display 17 (XREAL) and an `overlay_display_devices` simulated display (411x851 CSS @2.625,
 native 1082x2237 captures, and a full-retina 1170x2532 when the display is sized 1200x2700).
 A real network site is navigated and asserted as part of `setup.sh`'s verification.

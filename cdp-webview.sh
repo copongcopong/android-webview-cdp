@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Wire Termux to the Pi WebView shell's DevTools socket.
+# Wire Termux to the So7o Android WebView shell's DevTools socket.
 #
 #   ./cdp-webview.sh up [port]    (re)launch + unfreeze the app, adb forward, verify
 #   ./cdp-webview.sh direct       check the in-app relay on 127.0.0.1:9334 (no adb at all)
@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Default port is deliberately NOT 9222 — that one belongs to the existing
 # Chrome CDP setup (~/cdp-search.mjs, ~/projects/termux-pi-browser-search).
-PKG=com.pi.webview
+PKG=dev.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 PORT="${2:-9333}"
 ADB="${ADB:-adb}"
@@ -84,7 +84,7 @@ case "${1:-up}" in
     else
       echo "relay not answering on 9334." >&2
       echo "  - is the app running?  (it starts the relay in onCreate)"
-      echo "  - is this the build that HAS RelayServer?  check logcat: adb logcat -s PiWebViewRelay" >&2
+      echo "  - is this the build that HAS RelayServer?  check logcat: adb logcat -s So7oWebViewRelay" >&2
       exit 1
     fi
     ;;
@@ -96,7 +96,7 @@ case "${1:-up}" in
     printf 'adb      %s\n' "$($ADB forward --list | grep "tcp:$PORT" || echo 'no forward on that port')"
     ;;
   info)
-    TMP="${TMPDIR:-/tmp}/pi-webview-targets.json"
+    TMP="${TMPDIR:-/tmp}/so7o-webview-targets.json"
     curl -s -m 5 "http://127.0.0.1:$PORT/json/list" > "$TMP"
     python3 - "$TMP" <<'PY'
 import json, sys
