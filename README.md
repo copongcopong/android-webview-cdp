@@ -163,8 +163,14 @@ All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e.
 are current, taken on `app.so7o.webview`; the external-page ones are from earlier runs against
 other display setups.
 
-**The shell itself**, at its window's native size (840×1326 device px), showing the bundled demo
-page with the Java bridge answering:
+**The shell on a simulated display** — `./display.sh overlay` puts it on a 1080×2340/420
+`overlay_display_devices` display that renders off-screen. 411×851 CSS px at dpr 2.625, captured
+at the display's native 1082×2237:
+
+![So7o Android Webview Shell on a simulated 1080x2340 phone display](docs/img/shell-on-display.png)
+
+**The same shell at its window's native size** (840×1326 device px), when it is *not* on a
+simulated display — the bundled demo page with the Java bridge answering:
 
 ![So7o Android Webview Shell showing the bundled demo page](docs/img/shell-window.png)
 

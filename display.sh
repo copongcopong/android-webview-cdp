@@ -36,7 +36,7 @@ ADB="${ADB:-adb}"
 
 display_of_app() {
     $ADB shell dumpsys activity activities 2>/dev/null \
-        | awk '/Display #/{d=$2} /dev\.so7o\.webview\/\.MainActivity/{print d; exit}'
+        | awk -v pkg="$PKG" '/Display #/{d=$2} index($0, pkg "/.MainActivity"){print d; exit}'
 }
 relay_up() {
     [ "$(curl -s -m 4 -o /dev/null -w '%{http_code}' http://127.0.0.1:9334/json/version 2>/dev/null || true)" = "200" ]
@@ -47,9 +47,11 @@ relay_line() {
 }
 all_ids() { $ADB shell dumpsys display 2>/dev/null | grep -oE 'mDisplayId=[0-9]+' | cut -d= -f2 | sort -un | tr '\n' ' '; }
 task_on_display() {
-    $ADB shell dumpsys activity activities 2>/dev/null | awk -v want="#$1" '
+    # index() rather than a regex: the package name needs no escaping this way, and a
+    # stale pattern here silently reports "is the app installed?" while it is running.
+    $ADB shell dumpsys activity activities 2>/dev/null | awk -v want="#$1" -v pkg="$PKG" '
         /Display #/ { cur = $2 }
-        cur == want && /dev\.so7o\.webview\/\.MainActivity/ {
+        cur == want && index($0, pkg "/.MainActivity") {
             if (match($0, /t[0-9]+/)) { print substr($0, RSTART + 1, RLENGTH - 1); exit }
         }'
 }
