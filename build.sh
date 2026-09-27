@@ -63,7 +63,7 @@ javac \
   -nowarn \
   -d "$BUILD/classes" \
   @"$BUILD/sources.txt" 2>&1 | grep -viE "bootstrap class path|source value 8|target value 8|deprecat" || true
-[ -d "$BUILD/classes/dev/so7o/webview" ] || { echo "javac produced no classes"; exit 1; }
+[ -d "$BUILD/classes/app/so7o/webview" ] || { echo "javac produced no classes"; exit 1; }
 
 echo "==> 4/5 d8"
 find "$BUILD/classes" -name '*.class' > "$BUILD/inputs.txt"

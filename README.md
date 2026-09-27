@@ -67,7 +67,7 @@ The first check is what is on the other end of the port:
 ```console
 $ curl -s 127.0.0.1:9334/json/version
 {
-   "Android-Package": "dev.so7o.webview",
+   "Android-Package": "app.so7o.webview",
    "Browser": "Chrome/153.0.8010.36",
    "Protocol-Version": "1.3",
    "User-Agent": "Mozilla/5.0 (Linux; Android 16; SM-F936B …; wv) …",
@@ -297,7 +297,7 @@ repo** — `build.sh` generates `keystore.jks` on first use — so Android refus
 installed from someone else's build:
 
 ```bash
-adb uninstall dev.so7o.webview        # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
+adb uninstall app.so7o.webview        # INSTALL_FAILED_UPDATE_INCOMPATIBLE otherwise
 ```
 
 Uninstalling costs nothing here (the app stores no data).
@@ -325,8 +325,8 @@ Each step has an unambiguous check — useful when an agent is driving:
 | step | check | expected |
 |---|---|---|
 | build | `ls -l out/so7o-webview.apk` | ~20 KB file |
-| installed | `adb shell pm list packages \| grep dev.so7o.webview` | `package:dev.so7o.webview` |
-| running | `adb shell pidof dev.so7o.webview` | a pid |
+| installed | `adb shell pm list packages \| grep app.so7o.webview` | `package:app.so7o.webview` |
+| running | `adb shell pidof app.so7o.webview` | a pid |
 | relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
 | CDP | `node cdp.mjs 'document.title'` | `So7o Android WebView Shell` |
 | input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__so7o.taps()'` | counter +1 |
@@ -367,7 +367,7 @@ one: you can point the same tooling at any WebView/Chrome.
 cd ~/webview-shell
 ./build.sh                                  # aapt2 -> javac -> d8 -> alignment -> apksigner
 adb install -r out/so7o-webview.apk
-adb shell am start -n dev.so7o.webview/.MainActivity   # ← starts the relay
+adb shell am start -n app.so7o.webview/.MainActivity   # ← starts the relay
 
 node cdp.mjs 'document.title'               # evaluate in the page
 node cdp.mjs --click 'button'               # real mouse input (or --click 'text=tap me')
@@ -474,7 +474,7 @@ Reading the DOM, clicking a link for real, navigating back to Hacker News, cross
   such as `example.com` hides the repeat because its content ends before the seam. Keep the
   emulated pixels inside the surface (this window holds 1080x1652 device px, so `412x915 @1.5` =
   618x1373 is safe and `@2` = 824x1830 is not), or keep using `cdp.mjs --shot`, which clamps.
-- **A backgrounded app hangs CDP** (frozen cgroup) — `am start -n dev.so7o.webview/.MainActivity`
+- **A backgrounded app hangs CDP** (frozen cgroup) — `am start -n app.so7o.webview/.MainActivity`
   unfreezes it before you connect.
 
 ## A real run, start to finish
@@ -632,9 +632,9 @@ else's site.)
 
 | File | Role |
 |---|---|
-| `java/dev/so7o/webview/MainActivity.java` | debug flag, WebView, `so7o` JS bridge (`ping`/`info`/`toast`) |
-| `java/dev/so7o/webview/KeepAliveService.java` | foreground service — keeps the process out of the frozen cgroup |
-| `java/dev/so7o/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) |
+| `java/app/so7o/webview/MainActivity.java` | debug flag, WebView, `so7o` JS bridge (`ping`/`info`/`toast`) |
+| `java/app/so7o/webview/KeepAliveService.java` | foreground service — keeps the process out of the frozen cgroup |
+| `java/app/so7o/webview/RelayServer.java` | publishes the socket on `127.0.0.1:9334` (no adb needed) |
 | `assets/index.html` | demo page; exposes `window.__so7o` as a stable CDP handle |
 | `build.sh` | on-device build: aapt2 → javac → d8 → alignment check → apksigner |
 | `cdp-webview.sh` | pid discovery, freeze handling, `adb forward`, verification |
@@ -738,7 +738,7 @@ the force-stop and the unconditional `am task resize` exist to handle.
 If a device does not fill the display, the knob is an explicit fullscreen launch:
 
 ```bash
-adb shell am start --display <id> --windowingMode 1 -f 0x10000000 -n dev.so7o.webview/.MainActivity
+adb shell am start --display <id> --windowingMode 1 -f 0x10000000 -n app.so7o.webview/.MainActivity
 ```
 
 and if it refuses the simulated display entirely, falling back to its own screen keeps everything
@@ -808,7 +808,7 @@ Measured, unusual, and worth knowing before you wonder why something is still ru
 ```bash
 ./display.sh overlay-off                  # delete the persisted setting, app back to the phone
 ./cdp-webview.sh down                     # remove the 9333 adb forward, if you used that path
-adb shell am force-stop dev.so7o.webview    # only this stops the app itself
+adb shell am force-stop app.so7o.webview    # only this stops the app itself
 ```
 
 - **Closing the display does not stop the app.** Destroy the display and the Activity goes
@@ -842,7 +842,7 @@ curl 127.0.0.1:9333/json/version → 000   (process alive, Forward in place)
 the process freeze-exempt. With it running:
 
 - after **4 minutes** in the background: `cgroup unfrozen`, HTTP 200, CDP evaluating;
-- `adb shell am freeze dev.so7o.webview` was requested explicitly — the app kept
+- `adb shell am freeze app.so7o.webview` was requested explicitly — the app kept
   answering CDP (`isFrozen` never became true).
 
 `./cdp-webview.sh up` also calls `am start` unconditionally, which both launches a
@@ -865,7 +865,7 @@ With the relay, `adb forward --list` is empty and CDP still answers:
 ```
 ./cdp-webview.sh direct
 relay UP on 127.0.0.1:9334 (no adb forward involved)
-  dev.so7o.webview — Chrome/153.0.8010.36
+  app.so7o.webview — Chrome/153.0.8010.36
 ```
 
 So once the app is running, **control needs no adb at all** — wireless debugging
@@ -876,13 +876,13 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 ## Verified
 
 > **Status after the rename:** every entry below was recorded against the pre-rebrand build
-> (`com.pi.webview`). The package id is now `dev.so7o.webview`, which is a *different app* to
+> (`com.pi.webview`). The package id is now `app.so7o.webview`, which is a *different app* to
 > Android, so these need re-running against the new APK before they can be called verified
 > again — the rename is confirmed at APK level only (package, label, assets, signature).
 
 - Socket name is exactly `webview_devtools_remote_<pid>`, matching the app's own
   `Log.i` line and the name the Java side reports back through CDP.
-- `/json/version` → `Android-Package: dev.so7o.webview`, `Browser: Chrome/153`,
+- `/json/version` → `Android-Package: app.so7o.webview`, `Browser: Chrome/153`,
   UA marked `; wv`; `/json/list` → the page target.
 - `Runtime.evaluate` round-trips; `Page.captureScreenshot` renders the page.
 - **Input works without a finger**: `Input.dispatchMouseEvent` clicks a button and
@@ -893,7 +893,7 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 - `Network.enable` produces `Network.requestWillBeSent`; `DOM`, `CSS`, `Network.getCookies`
   respond.
 - **CDP → Java**: `so7o.info()` returns `{"pid":17493,"socket":"webview_devtools_remote_17493"}`,
-  matching `adb shell pidof dev.so7o.webview` exactly. The bridge really crosses processes.
+  matching `adb shell pidof app.so7o.webview` exactly. The bridge really crosses processes.
 - A page left alone with no interaction stays at 0 taps — input only moves when
   something injects or taps it.
 - **Relay works with no adb**: `adb forward --list` empty, CDP answering on

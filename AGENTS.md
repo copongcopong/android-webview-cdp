@@ -27,7 +27,7 @@ By hand, the same thing is:
 ```bash
 ./build.sh                       # aapt2 -> javac -> d8 -> alignment check -> apksigner
 adb install -r out/so7o-webview.apk
-adb shell am start -n dev.so7o.webview/.MainActivity            # optionally --display <id>
+adb shell am start -n app.so7o.webview/.MainActivity            # optionally --display <id>
 ```
 
 Signing needs the keystore password, which is **deliberately not in the repo**: set `KSPASS` in
@@ -46,7 +46,7 @@ Two traps for a fresh checkout:
 
 - **No signing key is committed.** `build.sh` generates `keystore.jks` on first use, so a fresh
   clone signs with a new key and Android will refuse to update an app installed from someone
-  else's build: `adb uninstall dev.so7o.webview` first (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
+  else's build: `adb uninstall app.so7o.webview` first (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`
   otherwise).
 - **Off-device (laptop + USB phone):** run the scripts as `bash build.sh` — their shebangs are
   absolute Termux paths — and reach the relay with `adb forward tcp:9334 tcp:9334`, which
@@ -128,7 +128,7 @@ Six things that will bite:
   Activity, so the FGS notification stays and the relay keeps listening on 9334. `status`
   showing `relay UP` with an empty `app display` is correct, not a bug — don't "fix" it by
   tying the relay to the Activity lifecycle.
-- Only `adb shell am force-stop dev.so7o.webview` stops everything (process, notification, port).
+- Only `adb shell am force-stop app.so7o.webview` stops everything (process, notification, port).
 
 ## Known behaviours / gotchas
 

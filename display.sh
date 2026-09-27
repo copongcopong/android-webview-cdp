@@ -29,7 +29,7 @@
 # The setting is persisted: the display is recreated after a reboot until you clear it.
 set -euo pipefail
 
-PKG=dev.so7o.webview
+PKG=app.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 OVERLAY_SPEC="${OVERLAY_SPEC:-1080x2340/420}"
 ADB="${ADB:-adb}"

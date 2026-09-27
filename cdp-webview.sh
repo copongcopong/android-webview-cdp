@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Default port is deliberately NOT 9222 — that one belongs to the existing
 # Chrome CDP setup (~/cdp-search.mjs, ~/projects/termux-pi-browser-search).
-PKG=dev.so7o.webview
+PKG=app.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 PORT="${2:-9333}"
 ADB="${ADB:-adb}"

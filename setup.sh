@@ -27,7 +27,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-PKG=dev.so7o.webview
+PKG=app.so7o.webview
 ACTIVITY="$PKG/.MainActivity"
 JAR_REL="sdk/platforms/android-36/android.jar"
 JAR_URL="https://dl.google.com/android/repository/platform-36_r02.zip"

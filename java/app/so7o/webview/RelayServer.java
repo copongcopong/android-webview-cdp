@@ -1,4 +1,4 @@
-package dev.so7o.webview;
+package app.so7o.webview;
 
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
