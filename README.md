@@ -21,7 +21,9 @@ Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 > `"Android-Package": "app.so7o.webview"` is an *old recording with the name swapped*, not a
 > capture from the current APK. The screenshots still show the old branding outright. Both are
 > re-recorded against `app.so7o.webview` once it is installed — see the banner on
-> [Verified](#verified).
+> [Verified](#verified). Two changes also postdate the recordings: the verification check now
+> targets Hacker News rather than `pi.dev`, and the Screenshots section carries a fresh Hacker
+> News capture.
 
 ## Quick start
 
@@ -180,11 +182,11 @@ with no adb forward:
 
 ![example.com on a simulated 1080x2340 phone display, captured at native size](docs/img/native-phone-display.png)
 
-**A real network site at a real phone viewport** — `pi.dev` → its extensions page, which is
-what `setup.sh` asserts as part of verification. 411×851 CSS px at dpr 2.625, captured at the
-display's native 1082×2237:
+**A real network site at a real phone viewport** — Hacker News at 412×915 CSS px, which is what
+`setup.sh` asserts as part of verification. Captured at 618×1373, the scale factor clamped to 1.5
+so the emulated pixels fit the window surface (see *Phone-sized viewports*):
 
-![pi.dev documentation, extensions page, at a phone viewport](docs/img/pi-dev-extensions.png)
+![Hacker News front page at a phone viewport](docs/img/hn-phone-viewport.png)
 
 ## Prerequisites: a fresh Android device
 
@@ -339,7 +341,7 @@ Each step has an unambiguous check — useful when an agent is driving:
 | relay | `./cdp-webview.sh direct` | `relay UP on 127.0.0.1:9334` |
 | CDP | `node cdp.mjs 'document.title'` | `So7o Android Webview Shell` |
 | input | `node cdp.mjs --click 'text=tap me'` then `node cdp.mjs '__so7o.taps()'` | counter +1 |
-| real site | `node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 'document.querySelector("h1").textContent'` | `Extensions` |
+| real site | `node cdp.mjs --nav https://news.ycombinator.com/news --wait '.titleline' 'document.title'` | `Hacker News` |
 | capture | `node cdp.mjs --shot shot.png` | PNG written, non-zero |
 | off-screen | `./display.sh overlay` | a display id and `411x851` CSS |
 
@@ -593,16 +595,16 @@ bash ./setup.sh
   ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
   ok    CDP round-trip: document.title = "So7o Android Webview Shell"
   ok    input injection: taps 0 → 1
-  ok    real site: pi.dev → extensions ({"h1":"Extensions","path":"/docs/latest/extensions"})
+  ok    real site: news.ycombinator.com/news ({"title":"Hacker News","stories":30})
   ok    screenshot: setup-check.png (phone-sized capture of that page)
 ```
 
 The signature warning is expected on a fresh clone and handled automatically: no signing key is
-committed, so `build.sh` generated one (`CN=So7o Android WebView`) and Android refused to update the
+committed, so `build.sh` generated one (`CN=So7o Android Webview`) and Android refused to update the
 app installed from a different key — hence uninstall + reinstall.
 
-Two lines there are worth explaining. **`real site: pi.dev → extensions`** is the flow
-navigating to a real network site, waiting for its `<h1>`, and reading the DOM back — the
+Two lines there are worth explaining. **`real site: news.ycombinator.com/news`** is the flow
+navigating to a real network site, waiting for a selector, and reading the DOM back — the
 bundled page only proves the WebView works, this proves the arrangement does. **The screenshot
 line is conditional**: a page whose window is not on screen reports `visibilityState: hidden`,
 has no frames to capture, and is reported as skipped with the fix rather than as a failure.
@@ -623,9 +625,8 @@ $ node cdp.mjs --shot clone-shot.png
 screenshot -> clone-shot.png            # 1082x2237 PNG of whatever page is loaded
 ```
 
-(That capture is the one in [Screenshots](#screenshots): `pi.dev`'s extensions page at a phone
-viewport. The flow returns the app to its own page afterwards, so it is not left on someone
-else's site.)
+(That capture is the one in [Screenshots](#screenshots): Hacker News at a phone viewport. The
+flow returns the app to its own page afterwards, so it is not left on someone else's site.)
 
 ### What that run proves
 

@@ -101,7 +101,7 @@ echo "==> 5/5 sign"
 if [ ! -f "$KS" ]; then
   keytool -genkeypair -v -keystore "$KS" -storepass "$KSPASS" -keypass "$KSPASS" \
     -alias so7o -keyalg RSA -keysize 2048 -validity 10000 \
-    -dname "CN=So7o Android WebView, OU=dev, O=local, L=., S=., C=US" >/dev/null 2>&1
+    -dname "CN=So7o Android Webview, OU=dev, O=local, L=., S=., C=US" >/dev/null 2>&1
   echo "    generated $KS"
 fi
 apksigner sign \

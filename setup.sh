@@ -223,12 +223,12 @@ else
             # A real network site at phone size — the point of the whole arrangement. The
             # bundled page above only proves the WebView works; this proves the pipeline
             # drives the open web at a mobile viewport and can read the result back.
-            node cdp.mjs --nav https://pi.dev --wait body >/dev/null 2>&1 || true
-            PI="$(node cdp.mjs --nav https://pi.dev/docs/latest/extensions --wait h1 \
-                  'JSON.stringify({h1:document.querySelector("h1").textContent,path:location.pathname})' 2>/dev/null | tail -1)"
-            case "$PI" in
-                *'"h1":"Extensions"'*) ok "real site: pi.dev → extensions ($PI)" ;;
-                *) warn "pi.dev extensions page gave: ${PI:-<no response>}" ;;
+            node cdp.mjs --nav https://news.ycombinator.com/news --wait body >/dev/null 2>&1 || true
+            HN="$(node cdp.mjs --nav https://news.ycombinator.com/news --wait '.titleline' \
+                  'JSON.stringify({title:document.title,stories:document.querySelectorAll(".titleline > a").length})' 2>/dev/null | tail -1)"
+            case "$HN" in
+                *'"title":"Hacker News"'*) ok "real site: news.ycombinator.com/news ($HN)" ;;
+                *) warn "Hacker News front page gave: ${HN:-<no response>}" ;;
             esac
 
             VIS="$(node cdp.mjs 'document.visibilityState' 2>/dev/null | tail -1)"
