@@ -15,14 +15,12 @@ is created.
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
 
-> **On the recorded output below.** Every transcript and screenshot here was captured on the
-> pre-rebrand build, when the app was `Pi WebView Shell` / `com.pi.webview`. The brand strings
-> in the transcripts have been renamed to the current names for readability, so a line such as
-> `"Android-Package": "app.so7o.webview"` is an *old recording with the name swapped*, not a
-> capture from the current APK. The screenshots have since been re-captured on
-> `app.so7o.webview` — see the banner on [Verified](#verified) for what was re-run — but the
-> transcripts have not, and still show the old run with the names swapped in. Two changes also
-> postdate them: the verification check now targets Hacker News rather than `pi.dev`.
+> **On the recorded output below.** Two kinds are mixed, and each says which it is. The
+> `## How it works` walkthrough was re-recorded on `app.so7o.webview` as it stands now — those
+> numbers are current. The `## A real run` transcript is a *past* run from before the rename,
+> kept as it happened, so it still reads `Pi WebView Shell` / `com.pi.webview` and still checks
+> `pi.dev`. The screenshots were re-captured on `app.so7o.webview`, and the [Verified](#verified)
+> banner records exactly what was re-run.
 
 ## Quick start
 
@@ -68,8 +66,9 @@ on the **device's own loopback**.
 
 That is the transport. What it buys you, end to end, is a page you fully control from a
 shell — and none of it except the `adb forward` path needs adb. The run below is a real one:
-SM-F936B, Android 16, Termux on the phone, and `adb devices` **empty** throughout. Everything
-went over the in-app relay on 9334.
+SM-F936B, Android 16, Termux on the phone. Every command goes over the in-app relay on 9334 —
+`adb forward --list` is empty and none of these invoke adb, even though adb happened to be
+connected while they were recorded.
 
 The first check is what is on the other end of the port:
 
@@ -90,21 +89,22 @@ only the Java side can know, which is the part that proves the bridge:
 ```console
 $ node cdp.mjs 'JSON.stringify({url:location.href, viewport:innerWidth+"x"+innerHeight,
     dpr:devicePixelRatio, ping:so7o.ping(), info:so7o.info()})'
-{"url":"file:///android_asset/index.html","viewport":"805x967","dpr":2.25,
- "ping":"pong from app pid 3389 at 1790507158923",
- "info":"{\"pid\":3389,\"socket\":\"webview_devtools_remote_3389\",…}"}
+{"url":"file:///android_asset/index.html","viewport":"805x927","dpr":2.25,
+ "ping":"pong from app pid 1832 at 1790515039819",
+ "info":"{\"pid\":1832,\"socket\":\"webview_devtools_remote_1832\",…}"}
 ```
 
-`so7o.info()` is a `@JavascriptInterface` method, so `pid 3389` came out of `Process.myPid()` on
-the Java side and made the round trip JS → Java → CDP → Termux. `805x967` at dpr 2.25 is this
-device's unfolded inner screen.
+`so7o.info()` is a `@JavascriptInterface` method, so `pid 1832` came out of `Process.myPid()` on
+the Java side and made the round trip JS → Java → CDP → Termux. `805x927` at dpr 2.25 is this
+device's unfolded inner screen (the window is freeform, so it is a little shorter than the full
+screen).
 
 Input is *injected*, not faked in JS: `--click` dispatches a real mouse event at the element's
 box, and `--type` an `Input.insertText`, so the page cannot tell either from a finger.
 
 ```console
 $ node cdp.mjs --click 'text=tap me'
-clicked BUTTON at 160,454
+clicked BUTTON at 160,432
 $ node cdp.mjs --type 'typed by CDP from Termux'
 typed "typed by CDP from Termux"
 ```
@@ -113,7 +113,7 @@ The bridge runs the other direction too — page JS reaching Android:
 
 ```console
 $ node cdp.mjs 'so7o.toast("Hello from CDP — sent by node in Termux")'
-toast sent
+toasted: Hello from CDP — sent by node in Termux
 ```
 
 And a real network site, fetched by the shell's own WebView rather than curl:
@@ -132,23 +132,26 @@ pixel surface is smaller than what you asked for:
 $ node cdp.mjs --device pixel-7 --shot pixel7.png
 ! display surface is only 1814x2178 px, but 412x915 CSS @2.625x needs 1082x2402 px.
   clamping dsf 2.625 -> 2 (→ 824x1830 px); beyond the surface, screenshots repeat the page.
+  override with --no-clamp, or --metrics 412x915x2 to pin this deliberately.
 device: pixel-7 -> {"w":412,"h":915,"dpr":2.000000014901161}  (surface 1814x2178)
 screenshot -> pixel7.png
 ```
 
 `--shot` is `Page.captureScreenshot`, so `pixel7.png` holds the page's own pixels, not a phone
-screenshot. Events arrive on the same socket, and `--repl` puts all of it behind a prompt:
+screenshot. Events arrive on the same socket, and `--repl` puts all of it behind a prompt (which
+also takes piped input, so a REPL session can be scripted):
 
 ```console
 $ DEBUG=1 node cdp.mjs 'console.log("hello from the page")'
-target 0A3E777C6F9F63E4F5258A875C8C8128 — So7o Android Webview Shell — file:///android_asset/index.html
+target 64260D29F27A7FCE9867A134AA1FA430 — So7o Android Webview Shell — file:///android_asset/index.html
   [event] Runtime.executionContextCreated
   [log] "hello from the page"
+undefined
 
-$ node cdp.mjs --repl
+$ printf '1+1\nlocation.href\n' | node cdp.mjs --repl
 CDP repl — So7o Android Webview Shell; .help for commands, .exit to leave
-cdp> 1+1
-2
+cdp> 2
+file:///android_asset/index.html
 ```
 
 **What this path cannot do is put the app somewhere better.** `./display.sh overlay` writes the
@@ -504,7 +507,9 @@ Reading the DOM, clicking a link for real, navigating back to Hacker News, cross
 This is the whole flow as it actually went on a phone that had never seen this repo — a Galaxy
 Z Fold on Android 16 with Termux installed and nothing else. Output is trimmed, but the
 awkward parts are kept on purpose. Nothing but Termux was installed on it, to prove the flow
-stands on its own. It ran before the rename, so the names in it are the swapped-in ones.
+stands on its own. It ran before the rename, so its transcript still reads `Pi WebView Shell` /
+`com.pi.webview` and its network check still hits `pi.dev` — nothing below has been retro-edited
+to match the current names.
 
 ### 0. What you need before you start (not scriptable)
 
@@ -601,18 +606,18 @@ bash ./setup.sh
 
 == launch and verify
   ok    relay answering on 127.0.0.1:9334 (no adb forward needed)
-  ok    CDP round-trip: document.title = "So7o Android Webview Shell"
+  ok    CDP round-trip: document.title = "Pi WebView Shell"
   ok    input injection: taps 0 → 1
-  ok    real site: news.ycombinator.com/news ({"title":"Hacker News","stories":30})
+  ok    real site: pi.dev → extensions ({"h1":"Extensions","path":"/docs/latest/extensions"})
   ok    screenshot: setup-check.png (phone-sized capture of that page)
 ```
 
 The signature warning is expected on a fresh clone and handled automatically: no signing key is
-committed, so `build.sh` generated one (`CN=So7o Android Webview`) and Android refused to update the
+committed, so `build.sh` generated one (`CN=Pi WebView`) and Android refused to update the
 app installed from a different key — hence uninstall + reinstall.
 
-Two lines there are worth explaining. **`real site: news.ycombinator.com/news`** is the flow
-navigating to a real network site, waiting for a selector, and reading the DOM back — the
+Two lines there are worth explaining. **`real site: pi.dev → extensions`** is the flow
+navigating to a real network site, waiting for its `<h1>`, and reading the DOM back — the
 bundled page only proves the WebView works, this proves the arrangement does. **The screenshot
 line is conditional**: a page whose window is not on screen reports `visibilityState: hidden`,
 has no frames to capture, and is reported as skipped with the fix rather than as a failure.
@@ -884,6 +889,7 @@ With the relay, `adb forward --list` is empty and CDP still answers:
 ./cdp-webview.sh direct
 relay UP on 127.0.0.1:9334 (no adb forward involved)
   app.so7o.webview — Chrome/153.0.8010.36
+then: node cdp.mjs --list
 ```
 
 So once the app is running, **control needs no adb at all** — wireless debugging
@@ -893,13 +899,14 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 
 ## Verified
 
-> **Status after the rename.** The core path has been re-run against `app.so7o.webview` and
-> holds: `/json/version` reports the new package, `Runtime.evaluate` round-trips, `so7o.ping()`
-> answers `pong from app pid 2076`, `so7o.info()` returns that pid and `127.0.0.1:9334`, a click
-> moves the page's own counter (`0 → 1`), the Hacker News assertion passes
-> (`{"title":"Hacker News","stories":30}`), and `--shot` writes an 840×1326 PNG — all over the
-> in-app relay with **no adb**. The multi-display rows still describe the pre-rename build; they
-> need a second display, hence adb, to re-run.
+> **Status after the rename.** Everything below has been re-run against `app.so7o.webview`:
+> `/json/version` reports the new package, `Runtime.evaluate` round-trips, `so7o.ping()` answers
+> `pong from app pid 1832`, `so7o.info()` returns that pid and `127.0.0.1:9334`, a click moves
+> the page's own counter (`0 → 1`), the Hacker News assertion passes
+> (`{"title":"Hacker News","stories":30}`), and `--shot` writes 840×1326 at the window size and
+> 1082×2237 on a simulated display. `./display.sh overlay` reports `task 5599 sized to 1080x2340`
+> with an `411x851` viewport, and `setup.sh` runs green end to end. All of it over the in-app
+> relay; the multi-display rows are the only ones that use adb.
 
 - Socket name is exactly `webview_devtools_remote_<pid>`, matching the app's own
   `Log.i` line and the name the Java side reports back through CDP.
