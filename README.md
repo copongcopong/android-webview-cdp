@@ -49,6 +49,96 @@ Shizuku) is refused too. `adbd` *is* allowed, so `adb forward` is the way in —
 and because Termux's own adb server runs on the device, the forwarded port lands
 on the **device's own loopback**.
 
+That is the transport. What it buys you, end to end, is a page you fully control from a
+shell — and none of it except the `adb forward` path needs adb. The run below is a real one:
+SM-F936B, Android 16, Termux on the phone, and `adb devices` **empty** throughout. Everything
+went over the in-app relay on 9334.
+
+The first check is what is on the other end of the port:
+
+```console
+$ curl -s 127.0.0.1:9334/json/version
+{
+   "Android-Package": "com.pi.webview",
+   "Browser": "Chrome/153.0.8010.36",
+   "Protocol-Version": "1.3",
+   "User-Agent": "Mozilla/5.0 (Linux; Android 16; SM-F936B …; wv) …",
+   "webSocketDebuggerUrl": "ws://127.0.0.1:9334/devtools/browser"
+}
+```
+
+Then the page itself. `Runtime.evaluate` returns the page's own view of its world — plus data
+only the Java side can know, which is the part that proves the bridge:
+
+```console
+$ node cdp.mjs 'JSON.stringify({url:location.href, viewport:innerWidth+"x"+innerHeight,
+    dpr:devicePixelRatio, ping:pi.ping(), info:pi.info()})'
+{"url":"file:///android_asset/index.html","viewport":"805x967","dpr":2.25,
+ "ping":"pong from app pid 3389 at 1790507158923",
+ "info":"{\"pid\":3389,\"socket\":\"webview_devtools_remote_3389\",…}"}
+```
+
+`pi.info()` is a `@JavascriptInterface` method, so `pid 3389` came out of `Process.myPid()` on
+the Java side and made the round trip JS → Java → CDP → Termux. `805x967` at dpr 2.25 is this
+device's unfolded inner screen.
+
+Input is *injected*, not faked in JS: `--click` dispatches a real mouse event at the element's
+box, and `--type` an `Input.insertText`, so the page cannot tell either from a finger.
+
+```console
+$ node cdp.mjs --click 'text=tap me'
+clicked BUTTON at 160,454
+$ node cdp.mjs --type 'typed by CDP from Termux'
+typed "typed by CDP from Termux"
+```
+
+The bridge runs the other direction too — page JS reaching Android:
+
+```console
+$ node cdp.mjs 'pi.toast("Hello from CDP — sent by node in Termux")'
+toast sent
+```
+
+And a real network site, fetched by the shell's own WebView rather than curl:
+
+```console
+$ node cdp.mjs --nav https://example.com
+navigated -> https://example.com/
+$ node cdp.mjs 'document.querySelector("h1").textContent'
+Example Domain
+```
+
+Device emulation rewrites the viewport and UA — and refuses to pretend when the display's
+pixel surface is smaller than what you asked for:
+
+```console
+$ node cdp.mjs --device pixel-7 --shot pixel7.png
+! display surface is only 1814x2178 px, but 412x915 CSS @2.625x needs 1082x2402 px.
+  clamping dsf 2.625 -> 2 (→ 824x1830 px); beyond the surface, screenshots repeat the page.
+device: pixel-7 -> {"w":412,"h":915,"dpr":2.000000014901161}  (surface 1814x2178)
+screenshot -> pixel7.png
+```
+
+`--shot` is `Page.captureScreenshot`, so `pixel7.png` holds the page's own pixels, not a phone
+screenshot. Events arrive on the same socket, and `--repl` puts all of it behind a prompt:
+
+```console
+$ DEBUG=1 node cdp.mjs 'console.log("hello from the page")'
+target 0A3E777C6F9F63E4F5258A875C8C8128 — Pi WebView Shell — file:///android_asset/index.html
+  [event] Runtime.executionContextCreated
+  [log] "hello from the page"
+
+$ node cdp.mjs --repl
+CDP repl — Pi WebView Shell; .help for commands, .exit to leave
+cdp> 1+1
+2
+```
+
+**What this path cannot do is put the app somewhere better.** `./display.sh overlay` writes the
+`overlay_display_devices` global, which needs the shell's `WRITE_SECURE_SETTINGS` — adb only. It
+exits 1 on a device with no adb (`adb: no devices/emulators found`) while the relay keeps
+serving. Every step above is adb-free; that one is not.
+
 ## Screenshots
 
 All of these are produced **by the tool itself** — `node cdp.mjs --shot`, i.e. the same
