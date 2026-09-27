@@ -356,10 +356,13 @@ async function runOnce() {
 if (opt.repl) {
   console.error(`CDP repl — ${target.title || target.url}; .help for commands, .exit to leave`);
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: 'cdp> ' });
-  rl.prompt();
+  // Guard every prompt: on piped/closed stdin the interface is already closed and
+  // rl.prompt() calls resume() on a dead stream, throwing ERR_USE_AFTER_CLOSE.
+  const prompt = () => { if (!rl.closed) rl.prompt(); };
+  prompt();
   for await (const raw of rl) {
     const line = raw.trim();
-    if (!line) { rl.prompt(); continue; }
+    if (!line) { prompt(); continue; }
     try {
       if (line === '.exit' || line === '.quit') break;
       else if (line === '.help') console.log('.help .exit .click <sel> .nav <url> .shot <file> .target   — anything else is evaluated as JS');
@@ -372,9 +375,9 @@ if (opt.repl) {
         console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
       }
     } catch (e) { console.error(`! ${e.message}`); }
-    rl.prompt();
+    prompt();
   }
-  rl.close();
+  if (!rl.closed) rl.close();
 } else {
   await runOnce();
 }
