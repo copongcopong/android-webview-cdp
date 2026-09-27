@@ -40,7 +40,7 @@ public class KeepAliveService extends Service {
         nm.createNotificationChannel(channel);
 
         Notification n = new Notification.Builder(this, CHANNEL)
-                .setContentTitle("So7o Shell")
+                .setContentTitle("So7o Webview Shell")
                 .setContentText("CDP reachable · pid " + android.os.Process.myPid())
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
                 .setOngoing(true)
