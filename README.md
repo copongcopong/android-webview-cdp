@@ -381,6 +381,94 @@ so a single invocation can perform a whole sequence. `DEBUG=1` streams CDP event
 when you want a port without the app's relay running, or from a laptop — the two are compared in
 *Two ways to get a port*.
 
+## Driving it from Puppeteer
+
+`cdp.mjs` is not the only client: the relay is an ordinary CDP endpoint, so anything that speaks
+CDP works. **Puppeteer does** — verified against a real, content-dense page rather than a blank
+one, at `https://news.ycombinator.com/news`.
+
+Use **`puppeteer-core`**, not `puppeteer`. The full package's install step downloads a *desktop
+Linux* Chromium, which will not run on aarch64 Android; `puppeteer-core` ships no browser and
+attaches to one that already exists — the WebView. In Termux:
+
+```bash
+mkdir -p ~/tmp/pptr-webview && cd ~/tmp/pptr-webview
+npm init -y && PUPPETEER_SKIP_DOWNLOAD=1 npm i puppeteer-core
+```
+
+```js
+import puppeteer from 'puppeteer-core';
+
+const browser = await puppeteer.connect({
+  browserURL: 'http://127.0.0.1:9334',   // the relay — no adb
+  defaultViewport: null,                  // keep the WebView's real size
+});
+
+// Pick the LIVE target: the list accumulates one entry per WebView ever created.
+const pages = await browser.pages();
+let page;
+for (const p of pages)
+  if ((await p.evaluate(() => document.visibilityState)) === 'visible') page = p;
+
+await page.goto('https://news.ycombinator.com/news', { waitUntil: 'domcontentloaded' });
+await page.$$eval('.titleline > a', (as) => as.slice(0, 5).map((a) => a.textContent.trim()));
+await page.click('.titleline > a');        // real Input.dispatchMouseEvent
+await page.evaluate(() => pi.info());      // the Java bridge, same session
+await browser.disconnect();
+```
+
+What that printed, unedited:
+
+```console
+$ node hn.mjs
+targets: 4 | attached to visible one
+real surface: 480x734@2.25
+title      : Hacker News
+stories[0:5]:
+   1. "As a Language Model": Chat Template Switches LLM Self-Referential Voice
+   2. Flip Fluid on Flip Dots
+   3. Does Georgism work? Five years later
+   4. OpenAI Feared "Optics" of what might appear on Hacker News
+   5. Go Concurrency Distilled
+story count: 30
+rank #1    : 1.
+clicked #1 -> https://arxiv.org/abs/2609.25021
+back        : https://news.ycombinator.com/news | Hacker News
+native shot : 1080x1652
+emulated    : 412x915@1.5000000447034836
+phone shot  : 618x1373
+DONE
+```
+
+Reading the DOM, clicking a link for real, navigating back to Hacker News, crossing into Java with
+`pi.info()`, and capturing pixels all work through puppeteer with no app changes. The page at
+`412x915 @1.5` (the scale that fits this window):
+
+![Hacker News front page at a phone viewport, driven and captured by puppeteer](docs/img/hn-puppeteer-phone.png)
+
+### What bites, and why
+
+- **`browser.newPage()` cannot work.** It throws `Protocol error (Target.createTarget): Not
+  supported` — the same Android restriction that blocks `/json/new`. Attach to the existing page.
+- **`pages()[0]` is not necessarily the live page.** The run above saw **4** targets and only one
+  reporting `visible`; the rest are leftovers from earlier Activity recreations. Skip the
+  visibility probe and you read one page while clicking in another — the same trap `cdp.mjs`
+  documents.
+- **`connect()`, never `launch()`** — there is no browser to launch, and no Chromium for Termux.
+- **Use `disconnect()`, not `close()`.** `close()` sends `Browser.close`; what that does to the
+  app's process was not tested here, and the point of attaching is to leave the app alone.
+- **Screenshots are unclamped.** Puppeteer sends the emulated size straight to
+  `Page.captureScreenshot` without the surface arithmetic `cdp.mjs` does. Ask for more device
+  pixels than the WebView's render surface holds and you get an image of the requested size with
+  **the page repeated** — measured: `412x915 @2` on the bundled demo page returned 824x1830 with
+  the page drawn five times. That is the WebView, not puppeteer: a raw
+  `Page.captureScreenshot` with the same override produces an identical file, and a short page
+  such as `example.com` hides the repeat because its content ends before the seam. Keep the
+  emulated pixels inside the surface (this window holds 1080x1652 device px, so `412x915 @1.5` =
+  618x1373 is safe and `@2` = 824x1830 is not), or keep using `cdp.mjs --shot`, which clamps.
+- **A backgrounded app hangs CDP** (frozen cgroup) — `am start -n com.pi.webview/.MainActivity`
+  unfreezes it before you connect.
+
 ## A real run, start to finish
 
 *A record of an actual run — context, not a required path. Follow
@@ -807,6 +895,12 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   CDP read the viewport and `Input.dispatchMouseEvent` clicked the button.
   `Page.captureScreenshot` gave 1247×1398 on display 24 — the page really renders at
   the target display's resolution.
+- **Puppeteer drives it too**, over the relay and with no app changes: `puppeteer-core`
+  `connect` → `pages()` → `goto` → DOM reads → a real click → `goBack`, all against
+  `news.ycombinator.com/news` (30 stories read; story #1 clicked through to arxiv).
+  `pi.info()` crossed into Java down the same session, and `emulate()` + `screenshot()`
+  captured the page at `412x915 @1.5`. `newPage()` fails with
+  `Target.createTarget: Not supported`.
 
 ## Gotchas
 
