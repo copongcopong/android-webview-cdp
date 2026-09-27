@@ -38,16 +38,21 @@ old URL). **`dev` is the default branch.**
 3. `git tag -a v0.1.0 -m "…" && git push origin v0.1.0`, tagged on `main`.
 4. `gh release create v0.1.0 out/so7o-webview.apk --title … --notes …` — attach the signed APK.
 5. **Re-align `dev`.** A rebase or squash merge mints a *new* commit, so `main` and `dev` diverge
-   by SHA even though the trees are identical. Point `dev` back at the release:
+   by SHA even though the trees are identical. Check for **content** that has not shipped, then
+   point `dev` back at the release:
 
    ```bash
+   git fetch origin
+   git diff --quiet origin/main dev || { git diff --stat origin/main dev; echo "dev has unshipped content — stop"; }
    git checkout dev && git reset --hard origin/main
    git push --force-with-lease origin dev
    ```
 
-   `dev` carries no PR requirement and the admin role bypasses `non_fast_forward`, so this is
-   allowed. **Check `git log origin/main..dev` first** — a force-push here discards anything on
-   `dev` that has not reached `main` yet.
+   Compare content, **not** `git log origin/main..dev`: a rebase merge rewrites the SHA, so the
+   commit that *is* on `main` still appears there — the check never goes quiet, which trains you
+   to ignore it. (This cost a discarded commit once: the reset ran with two commits listed.)
+   `dev` carries no PR requirement and the admin role bypasses `non_fast_forward`, so the
+   force-push is allowed.
 
 ### Conventions this repo has already learned the hard way
 
