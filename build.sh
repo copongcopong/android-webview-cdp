@@ -35,8 +35,8 @@ fi
 KSPASS="${KSPASS:?set KSPASS in the environment, or create $KSFILE containing it}"
 MIN_SDK=30
 TARGET_SDK=36
-VERSION_CODE="${VERSION_CODE:-2}"
-VERSION_NAME="${VERSION_NAME:-0.2}"
+VERSION_CODE="${VERSION_CODE:-3}"
+VERSION_NAME="${VERSION_NAME:-0.3}"
 
 rm -rf "$BUILD" "$OUT"
 mkdir -p "$BUILD/res" "$BUILD/classes" "$BUILD/gen" "$BUILD/dex" "$OUT"
