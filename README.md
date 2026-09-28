@@ -12,13 +12,32 @@ case is **mobile browser testing** — you get a real WebView, a real phone view
 input and real pixels, with no desktop emulator and no Chrome-for-Android plumbing in the loop.
 Any CDP client can drive it; `cdp.mjs` and Puppeteer are both verified below.
 
-**Camera and microphone work** (v0.2.0). A page that calls `getUserMedia()` needs two things a
-bare WebView does not give it: the Android `CAMERA` permission, and a `RESOURCE_VIDEO_CAPTURE`
-grant from `WebChromeClient.onPermissionRequest` — without the second one the default is a silent
-refusal and the page only sees `NotAllowedError`. Both are in place, and the app still asks
-Android itself the first time a page needs the camera (nothing is granted up front, and every
-non-camera request is denied). Verified with a front/back camera page served by the phone, in the
-shell, on a Galaxy Z Flip3 — see [Verified](#verified).
+**Camera, microphone, uploads, downloads, popups and wake lock are answered** — see
+[Gates a bare WebView refuses](#gates-a-bare-webview-refuses). Camera capture is verified on a
+Galaxy Z Flip3; microphone capture is implemented and its permission path is verified, but *this
+device* refuses to start the audio source — the honest status is in [Verified](#verified).
+
+## Gates a bare WebView refuses
+
+Each of these is a **silent** refusal by default: no dialog, no console error, just a generic
+failure in the page (`NotAllowedError`, a dead button, a dialog that never appears). The shell
+answers them:
+
+| gate | unlocks | app must also hold | measured |
+|---|---|---|---|
+| `onPermissionRequest` → `RESOURCE_VIDEO_CAPTURE` | `getUserMedia({video})` | `CAMERA` | works: front + back, `1080×1920 @ 30fps` |
+| `onPermissionRequest` → `RESOURCE_AUDIO_CAPTURE` | `getUserMedia({audio})`, `SpeechRecognition` | `RECORD_AUDIO` | grant path works; capture refused by this device — see [Verified](#verified) |
+| `onPermissionRequest` → EME / MIDI sysex | Widevine DRM, Web MIDI sysex | — | denied on purpose |
+| `onShowFileChooser` | `<input type=file>`, including `capture=` | — | works; a `capture` request contributes a `MediaStore` entry, so no `FileProvider` is needed |
+| `DownloadListener` | downloads | — | `blob:`/`data:` → `so7o.saveDataUrl()` works; the HTML `download` attribute does **not** reach the listener |
+| `setSupportMultipleWindows` + `onCreateWindow` | `window.open`, `target=_blank` | — | works: a real second WebView, which is also a second CDP target |
+| `WAKE_LOCK` | `navigator.wakeLock.request('screen')` | — | works |
+| `onJsAlert/Confirm/Prompt`, `onGeolocationPermissionsShowPrompt`, `onShowCustomView` | JS dialogs, geolocation, fullscreen video | — | **not implemented** — pages needing them still fail silently |
+
+`so7o.diagnostics()` reports the Android side of all of it: permission *and* app-op state for camera
+and microphone, `AudioManager` mode, mic mute, `hasMic`, and whether the WebView has window focus.
+The permission/app-op split matters — `checkSelfPermission()` can say granted while the app-op that
+`AudioRecord` actually consults says otherwise.
 
 Source lives at `github.com/jan5o7o/android-webview-cdp`.
 
@@ -260,6 +279,7 @@ complains or `pkg install aapt2` finds nothing, that is the build you are on.
 | root, `sudo`, proot-distro, X11 | **no** | the build is a plain userspace toolchain |
 | a particular Termux version | **no** | any current build provides bash 5 and the packages below |
 | camera permission (the *app*, not Termux) | **only while a page asks** | `getUserMedia` needs `android.permission.CAMERA` plus an `onPermissionRequest` grant, so a page with a camera asks Android for it on first use. Nothing else in the app touches it, and a build without it still drives pages normally |
+| microphone permission (the *app*, not Termux) | **only while a page asks** | same shape: `android.permission.RECORD_AUDIO` + an `RESOURCE_AUDIO_CAPTURE` grant, requested on first use |
 
 Two floors worth not confusing: Termux itself supports considerably older Android than this app
 requires, so *having Termux* tells you nothing about the **Android 14+** device requirement above.
@@ -956,6 +976,35 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   LIVE. Frames were therefore proved by drawing the track into a canvas from inside the page
   (32×32 luminance stats: mean 83 / sd 47 for the back sensor, mean 136 / sd 52 for the front) and
   extracting a JPEG through CDP, not by capturing the screen.
+- **The other gates, same device, v0.4 (versionCode 4).**
+  - `onShowFileChooser`: `<input type=file accept="image/*" capture>` reaches the system chooser,
+    and `so7o.lastFileChooser()` reports
+    `{"acceptTypes":["image/*"],"captureEnabled":true,"multiple":false}`.
+  - `window.open('/camera/','_blank')` opens a **second WebView** in a dialog — `/json/list`
+    shows two page targets — and the page being driven is left alone (`location.href` unchanged).
+    On a WebView with no `onCreateWindow` the same call *replaces* the current view instead (that
+    is how it behaved before this landed; it killed a probe mid-run).
+  - Downloads: `so7o.saveDataUrl(name, dataURL)` writes into the public Downloads collection
+    (`/sdcard/Download/probe-bridge.txt`, 27 B, content verified). A **real mouse click** on
+    `<a download href="/style.css" download=…>` produced no download at all — WebView does not
+    route the HTML `download` attribute to `DownloadListener`, so a page that wants to save inside
+    the shell should call the bridge (or serve the file with `Content-Disposition: attachment`,
+    which is untested here).
+  - `navigator.wakeLock.request('screen')` resolves and releases with `WAKE_LOCK` declared.
+    Note `navigator.permissions.query()` is not a usable signal in WebView: it reports `denied`
+    for `screen-wake-lock` that works, and `prompt` for `camera`/`microphone` that work.
+- **Open item — microphone capture is refused by this device.** The gate is implemented and its
+  permission path is verified: an audio request raises Android's `RECORD_AUDIO` prompt, and
+  answering it moves the page's error from `NotAllowedError` (v0.2: "Permission denied") to
+  `NotReadableError: Could not start audio source` — the grant landed, the *device* failed to open.
+  `so7o.diagnostics()` then reports `micPermission:true`, `micAppOp:"allowed"`,
+  `cameraAppOp:"allowed"`, `audioMode:0`, `micMute:false`, `hasMic:true`, `nativeSampleRate:48000`,
+  `windowFocus:true`, `targetSdk:36`, `sdk:35`. Ruled out so far: a held microphone (a Termux:API
+  recording was stopped and `isRecording:false` confirmed), the runtime permission, the app-op, and
+  background restrictions (the app was in the foreground with window focus). Not yet tried:
+  a `microphone`-typed foreground service (Android 14+ lets an FGS use mic capture only with a
+  matching type, and this app's FGS is `specialUse`), `MODIFY_AUDIO_SETTINGS`, and an A/B against a
+  plain Chrome tab on the same device.
 - **Multi-display**: launched on display **17** (XREAL One, 1920×1080, density 213)
   and display **24** (a virtual display, 1245×1397, density 360 → dpr 2.25). On each,
   CDP read the viewport and `Input.dispatchMouseEvent` clicked the button.

@@ -2,12 +2,14 @@ package app.so7o.webview;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AppOpsManager;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Message;
@@ -427,6 +429,49 @@ public class MainActivity extends Activity {
         public String lastFileChooser() {
             return lastFileChooser;
         }
+
+        /**
+         * Why a capture may be refused. The interesting split is permission vs
+         * app-op: checkSelfPermission() can say granted while AudioRecord()/
+         * CameraManager() look at the *app-op* and fail anyway.
+         */
+        @JavascriptInterface
+        public String diagnostics() {
+            try {
+                AppOpsManager ops = (AppOpsManager) getSystemService(APP_OPS_SERVICE);
+                AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+                PackageManager pm = getPackageManager();
+                int uid = android.os.Process.myUid();
+                String pkg = getPackageName();
+                return "{" + "\"sdk\":" + android.os.Build.VERSION.SDK_INT
+                        + ",\"targetSdk\":" + pm.getApplicationInfo(pkg, 0).targetSdkVersion
+                        + ",\"cameraPermission\":" + (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                        + ",\"micPermission\":" + (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                        + ",\"micAppOp\":\"" + opName(ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_RECORD_AUDIO, uid, pkg)) + "\""
+                        + ",\"cameraAppOp\":\"" + opName(ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_CAMERA, uid, pkg)) + "\""
+                        + ",\"audioMode\":" + am.getMode()
+                        + ",\"micMute\":" + am.isMicrophoneMute()
+                        + ",\"hasMic\":" + pm.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+                        + ",\"nativeSampleRate\":" + am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+                        + ",\"windowFocus\":" + windowFocused()
+                        + "}";
+            } catch (Exception e) {
+                Log.w(TAG, "diagnostics failed", e);
+                return "{\"error\":\"" + e + "\"}";
+            }
+        }
+    }
+
+    private boolean windowFocused() {
+        return web != null && web.hasWindowFocus();
+    }
+
+    private static String opName(int mode) {
+        if (mode == AppOpsManager.MODE_ALLOWED) return "allowed";
+        if (mode == AppOpsManager.MODE_IGNORED) return "IGNORED";
+        if (mode == AppOpsManager.MODE_ERRORED) return "ERRORED";
+        if (mode == AppOpsManager.MODE_DEFAULT) return "default";
+        return "mode" + mode;
     }
 
     // ------------------------------------------------------------ lifecycle
