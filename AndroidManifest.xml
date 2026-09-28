@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="app.so7o.webview"
-    android:versionCode="1"
-    android:versionName="0.1">
+    android:versionCode="2"
+    android:versionName="0.2">
 
     <!-- Not needed for CDP-over-adb-forward (that path is a local socket).
          Needed only if the page itself loads remote content. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera: getUserMedia() inside the WebView is gated twice — the app must
+         hold this Android permission AND grant RESOURCE_VIDEO_CAPTURE in
+         WebChromeClient.onPermissionRequest (see MainActivity). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- Keeps the process out of the frozen cgroup while backgrounded, so the
          DevTools socket stays reachable from Termux. -->
@@ -23,7 +30,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="So7o Webview Shell"
-            android:configChanges="orientation|screenSize|keyboardHidden|density">
+            android:configChanges="orientation|screenSize|keyboardHidden|density"
+            android:screenOrientation="fullSensor">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

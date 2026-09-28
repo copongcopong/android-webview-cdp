@@ -12,6 +12,14 @@ case is **mobile browser testing** — you get a real WebView, a real phone view
 input and real pixels, with no desktop emulator and no Chrome-for-Android plumbing in the loop.
 Any CDP client can drive it; `cdp.mjs` and Puppeteer are both verified below.
 
+**Camera and microphone work** (v0.2.0). A page that calls `getUserMedia()` needs two things a
+bare WebView does not give it: the Android `CAMERA` permission, and a `RESOURCE_VIDEO_CAPTURE`
+grant from `WebChromeClient.onPermissionRequest` — without the second one the default is a silent
+refusal and the page only sees `NotAllowedError`. Both are in place, and the app still asks
+Android itself the first time a page needs the camera (nothing is granted up front, and every
+non-camera request is denied). Verified with a front/back camera page served by the phone, in the
+shell, on a Galaxy Z Flip3 — see [Verified](#verified).
+
 Source lives at `github.com/jan5o7o/android-webview-cdp`.
 
 Verified end-to-end on SM-F936B (One UI, Android 16 / API 36), 2026-09.
@@ -251,6 +259,7 @@ complains or `pkg install aapt2` finds nothing, that is the build you are on.
 | storage permission | **no** | nothing outside the repo and `$HOME` is written; the platform jar unpacks into `sdk/` |
 | root, `sudo`, proot-distro, X11 | **no** | the build is a plain userspace toolchain |
 | a particular Termux version | **no** | any current build provides bash 5 and the packages below |
+| camera permission (the *app*, not Termux) | **only while a page asks** | `getUserMedia` needs `android.permission.CAMERA` plus an `onPermissionRequest` grant, so a page with a camera asks Android for it on first use. Nothing else in the app touches it, and a build without it still drives pages normally |
 
 Two floors worth not confusing: Termux itself supports considerably older Android than this app
 requires, so *having Termux* tells you nothing about the **Android 14+** device requirement above.
@@ -932,6 +941,21 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
   `captureBeyondViewport:true`) times out and `startScreencast` yields 0 frames — while JS, DOM,
   network, timers and input injection all still work. On the `overlay_display_devices` display,
   with the same app and the same commands, capture works at 1082×2237.
+- **Camera (`getUserMedia`) works, front and back** (v0.2.0, SM-F711B / Android 15 / API 35).
+  A page served over HTTPS by the phone itself, loaded in the shell, reports
+  `camera 2, facing back` at `1080×1920 @ 30fps` and — after a flip — `camera 1, facing front`
+  with the preview mirrored, both `visibilityState=visible` and frames flowing
+  (`videoWidth 1080`, `paused false`). The grant path is exercised for real: the first load shows
+  Android's runtime CAMERA prompt, and the stream only starts after it is answered.
+  Capturing from that stream works too (`canvas.toBlob` → `1080×1920` JPEG, 373 KB), with one
+  documented quirk: the first JPEG encode in a fresh WebView process took **13 s** on this phone
+  (Skia / GPU warm-up) and 223 ms once warm. The page works around it by starting a throwaway
+  64 px encode as soon as the stream is live.
+  Caveat, and why the numbers above are not screenshots: `Page.captureScreenshot` does **not**
+  composite the video layer — the shot comes back with the stage empty while the readouts say
+  LIVE. Frames were therefore proved by drawing the track into a canvas from inside the page
+  (32×32 luminance stats: mean 83 / sd 47 for the back sensor, mean 136 / sd 52 for the front) and
+  extracting a JPEG through CDP, not by capturing the screen.
 - **Multi-display**: launched on display **17** (XREAL One, 1920×1080, density 213)
   and display **24** (a virtual display, 1245×1397, density 360 → dpr 2.25). On each,
   CDP read the viewport and `Input.dispatchMouseEvent` clicked the button.

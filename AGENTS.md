@@ -33,7 +33,7 @@ old URL). **`dev` is the default branch.**
 ### Releases
 
 1. Bump `versionCode` / `versionName` in `AndroidManifest.xml` — they are the source of truth
-   (currently `1` / `0.1`).
+   (currently `2` / `0.2`).
 2. PR `dev` → `main` (the ruleset requires the PR), merge.
 3. `git tag -a v0.1.0 -m "…" && git push origin v0.1.0`, tagged on `main`.
 4. `gh release create v0.1.0 out/so7o-webview.apk --title … --notes …` — attach the signed APK.
