@@ -979,7 +979,10 @@ can be off entirely. The relay is bound per *process*, so an Activity recreation
 - **The other gates, same device, v0.4 (versionCode 4).**
   - `onShowFileChooser`: `<input type=file accept="image/*" capture>` reaches the system chooser,
     and `so7o.lastFileChooser()` reports
-    `{"acceptTypes":["image/*"],"captureEnabled":true,"multiple":false}`.
+    `{"acceptTypes":["image/*"],"captureEnabled":true,"multiple":false}`. Picking an image
+    returns it to the page — `input.files[0]` = `1000008640.jpg`, 14929 B — so both directions work.
+    Not yet exercised: the `capture` branch that contributes a `MediaStore` entry and has the camera
+    app write into it (the pick above came from the picker, not the camera entry).
   - `window.open('/camera/','_blank')` opens a **second WebView** in a dialog — `/json/list`
     shows two page targets — and the page being driven is left alone (`location.href` unchanged).
     On a WebView with no `onCreateWindow` the same call *replaces* the current view instead (that
