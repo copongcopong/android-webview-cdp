@@ -95,6 +95,9 @@ node ~/.local/share/So7oWebShell/cdp.mjs --repl
   `count` or `setlang` made Bing return unrelated results.
 - `read` returns page text only; it does not capture screenshots. Screenshots
   need the app in the foreground and are outside this workflow.
+- `search` and `read` include a `usage` block with `chars`, `words`, and
+  `approx_tokens` (characters divided by 3.5). The MCP JSON is pretty-printed, so
+  the model sees a little more. Use the model's reported usage for billing.
 - Updating the app leaves the installed CLI, skill, and tile in place.
   Updating those leaves the app alone.
 

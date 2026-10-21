@@ -41,6 +41,14 @@ function visibleOf(t) {
   }
 }
 
+// Size of the payload the model will see. Not a billing figure: model
+// tokenizers differ, and the JSON is pretty-printed by the MCP server.
+function usageOf(text) {
+  const chars = text.length;
+  const words = (text.match(/\S+/g) || []).length;
+  return { chars, words, approx_tokens: Math.ceil(chars / 3.5) };
+}
+
 async function relayUp() {
   try {
     await fetchJson("/json/version", 1500);
@@ -309,13 +317,14 @@ export async function search(query, { limit = DEFAULT_LIMIT } = {}) {
       : (await evaluate(c, "document.body.innerText.slice(0,300)").catch(() => ""))
           .replace(/\s+/g, " ")
           .slice(0, 160);
-    return {
+    const payload = {
       query: q,
       engine: "bing",
       results,
       target: { id: t.id, title: t.title, url: t.url },
       ...(results.length ? {} : { note: pageNote ? `No results; page says: ${pageNote}` : "No results" }),
     };
+    return { ...payload, usage: usageOf(JSON.stringify(payload)) };
   } finally {
     c.close();
   }
@@ -336,7 +345,8 @@ export async function readPage(url, { maxChars = MAX_TEXT } = {}) {
         return JSON.stringify({ title: document.title, url: location.href, text: text.slice(0, ${cap}) });
       })()`
     );
-    return { ...JSON.parse(raw || "{}"), target: { id: t.id, title: t.title } };
+    const payload = { ...JSON.parse(raw || "{}"), target: { id: t.id, title: t.title } };
+    return { ...payload, usage: usageOf(JSON.stringify(payload)) };
   } finally {
     c.close();
   }

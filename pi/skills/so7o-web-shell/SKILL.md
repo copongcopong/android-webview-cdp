@@ -56,4 +56,7 @@ node ~/.local/share/So7oWebShell/cdp.mjs --repl
   a consent or verification page.
 - `web_read` returns page text; it does not capture screenshots. Screenshots need
   the app in the foreground and are outside this workflow.
+- Results include `usage.approx_tokens` as a size hint (characters divided by
+  3.5). The MCP JSON has indentation, so the model sees a little more. Billing
+  comes from the model's reported usage.
 - Search and read change the visible So7o page.
