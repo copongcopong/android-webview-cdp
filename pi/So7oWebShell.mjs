@@ -4,7 +4,7 @@
 //
 //   node So7oWebShell.mjs status
 //   node So7oWebShell.mjs launch
-//   node So7oWebShell.mjs search "query" [limit]
+//   node So7oWebShell.mjs search "query" [limit] [--brief] [--ddg]
 //   node So7oWebShell.mjs read https://example.com [maxChars]
 //   node So7oWebShell.mjs js 'document.title'
 //
@@ -284,45 +284,92 @@ const BING_EXTRACT = `(() => {
     if (!a) continue;
     const title = (li.querySelector("h2")?.innerText || a.innerText || "").trim();
     const url = decode(a.href);
-    const cite = (li.querySelector("cite")?.innerText || "").trim();
     const snippet = (li.querySelector(".b_caption p, .b_snippet, p")?.innerText || "").trim();
     if (!title || !url || seen.has(url)) continue;
     seen.add(url);
-    out.push({ title, url, cite, snippet });
+    out.push({ title, url, snippet });
   }
   return JSON.stringify(out);
 })()`;
 
-export async function search(query, { limit = DEFAULT_LIMIT } = {}) {
+const DDG_EXTRACT = `(() => {
+  const out = [];
+  const seen = new Set();
+  const decode = (href) => {
+    try {
+      const u = new URL(href, location.href);
+      const p = u.searchParams.get("uddg");
+      if (p) return decodeURIComponent(p);
+    } catch {}
+    return href;
+  };
+  for (const el of document.querySelectorAll("div.result")) {
+    if (el.classList.contains("result--ad")) continue;
+    const a = el.querySelector("a.result__a");
+    if (!a) continue;
+    const title = (a.innerText || "").trim();
+    const url = decode(a.href);
+    const snippet = (el.querySelector(".result__snippet")?.innerText || "").trim();
+    if (!title || !url || seen.has(url)) continue;
+    seen.add(url);
+    out.push({ title, url, snippet });
+  }
+  return JSON.stringify(out);
+})()`;
+
+export async function search(query, { limit = DEFAULT_LIMIT, brief = false, engine = "bing" } = {}) {
   const q = String(query || "").trim();
   if (!q) throw new Error("empty query");
-  const n = Math.max(1, Math.min(Number(limit) || DEFAULT_LIMIT, 10));
-  // Keep the URL bare: Bing serves junk when count/setlang are added here.
-  const url = "https://www.bing.com/search?q=" + encodeURIComponent(q);
-  const { c, t } = await connect();
+  const n = Math.max(1, Math.min(Number(limit) || DEFAULT_LIMIT, 20));
+  const useDdg = engine === "ddg";
+  const { c } = await connect();
+  const collected = [];
+  const seen = new Set();
+  let note = "";
   try {
-    await navigate(c, url);
-    await waitFor(c, "li.b_algo", 8000);
-    let results = JSON.parse((await evaluate(c, BING_EXTRACT)) || "[]");
-    if (!results.length) {
-      const alt = await evaluate(
-        c,
-        `JSON.stringify([...document.querySelectorAll("h2 a")].slice(0, ${n * 2}).map(a => ({title:(a.innerText||"").trim(),url:a.href,snippet:""})).filter(x => x.title && x.url && !x.url.includes("bing.com")))`
-      );
-      results = JSON.parse(alt || "[]");
-    }
-    results = results.slice(0, n);
-    const pageNote = results.length
-      ? ""
-      : (await evaluate(c, "document.body.innerText.slice(0,300)").catch(() => ""))
+    // Bing serves about ten results per page; DuckDuckGo HTML serves ten.
+    // A second page is fetched only when the caller asks for more than ten.
+    const pages = n > 10 ? [0, 10] : [0];
+    for (const offset of pages) {
+      const url = useDdg
+        ? "https://html.duckduckgo.com/html/?q=" +
+          encodeURIComponent(q) +
+          (offset ? "&s=" + offset : "")
+        : "https://www.bing.com/search?q=" +
+          encodeURIComponent(q) +
+          (offset ? "&first=" + (offset + 1) : "");
+      await navigate(c, url);
+      await waitFor(c, useDdg ? "div.result" : "li.b_algo", 8000);
+      let rows = JSON.parse((await evaluate(c, useDdg ? DDG_EXTRACT : BING_EXTRACT)) || "[]");
+      if (!rows.length) {
+        const alt = useDdg
+          ? `JSON.stringify([...document.querySelectorAll("a.result__a")].slice(0, ${n * 2}).map(a => ({title:(a.innerText||"").trim(),url:a.href,snippet:""})).filter(x => x.title && x.url && !x.url.includes("duckduckgo.com/l/")))`
+          : `JSON.stringify([...document.querySelectorAll("h2 a")].slice(0, ${n * 2}).map(a => ({title:(a.innerText||"").trim(),url:a.href,snippet:""})).filter(x => x.title && x.url && !x.url.includes("bing.com")))`;
+        rows = JSON.parse((await evaluate(c, alt)) || "[]");
+      }
+      if (!rows.length && offset === 0) {
+        note = (await evaluate(c, "document.body.innerText.slice(0,300)").catch(() => ""))
           .replace(/\s+/g, " ")
           .slice(0, 160);
+      }
+      for (const row of rows) {
+        if (seen.has(row.url)) continue;
+        seen.add(row.url);
+        collected.push(row);
+        if (collected.length >= n) break;
+      }
+      if (collected.length >= n) break;
+    }
+    const results = collected.slice(0, n).map((row) =>
+      brief
+        ? { title: row.title, url: row.url }
+        : { title: row.title, url: row.url, snippet: row.snippet }
+    );
     const payload = {
       query: q,
-      engine: "bing",
+      engine: useDdg ? "ddg" : "bing",
       results,
-      target: { id: t.id, title: t.title, url: t.url },
-      ...(results.length ? {} : { note: pageNote ? `No results; page says: ${pageNote}` : "No results" }),
+      ...(results.length ? {} : { note: note ? `No results; page says: ${note}` : "No results" }),
     };
     return { ...payload, usage: usageOf(JSON.stringify(payload)) };
   } finally {
@@ -333,7 +380,7 @@ export async function search(query, { limit = DEFAULT_LIMIT } = {}) {
 export async function readPage(url, { maxChars = MAX_TEXT } = {}) {
   if (!/^https?:\/\//i.test(url)) throw new Error("read needs an http(s) URL");
   const cap = Math.max(1000, Math.min(Number(maxChars) || MAX_TEXT, 60000));
-  const { c, t } = await connect();
+  const { c } = await connect();
   try {
     await navigate(c, url);
     await waitFor(c, "body", 8000);
@@ -345,7 +392,7 @@ export async function readPage(url, { maxChars = MAX_TEXT } = {}) {
         return JSON.stringify({ title: document.title, url: location.href, text: text.slice(0, ${cap}) });
       })()`
     );
-    const payload = { ...JSON.parse(raw || "{}"), target: { id: t.id, title: t.title } };
+    const payload = { ...JSON.parse(raw || "{}") };
     return { ...payload, usage: usageOf(JSON.stringify(payload)) };
   } finally {
     c.close();
@@ -366,7 +413,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const usage = `usage:
   node So7oWebShell.mjs status
   node So7oWebShell.mjs launch
-  node So7oWebShell.mjs search "query" [limit]
+  node So7oWebShell.mjs search "query" [limit] [--brief] [--ddg]
   node So7oWebShell.mjs read URL [maxChars]
   node So7oWebShell.mjs js "expression"`;
   const out = (o) => console.log(JSON.stringify(o, null, 2));
@@ -374,9 +421,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     if (cmd === "status") out(await status());
     else if (cmd === "launch") out(await launch());
     else if (cmd === "search") {
+      const brief = args.includes("--brief");
+      const engine = args.includes("--ddg") ? "ddg" : "bing";
+      const rest = args.filter((a) => a !== "--brief" && a !== "--ddg");
       let limit;
-      if (/^\d+$/.test(args.at(-1) || "")) limit = Number(args.pop());
-      out(await search(args.join(" "), { limit }));
+      if (/^\d+$/.test(rest.at(-1) || "")) limit = Number(rest.pop());
+      out(await search(rest.join(" "), { limit, brief, engine }));
     } else if (cmd === "read") {
       out(await readPage(args[0], { maxChars: args[1] }));
     } else if (cmd === "js") {

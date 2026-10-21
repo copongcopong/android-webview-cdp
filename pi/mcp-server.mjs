@@ -9,7 +9,7 @@ const TOOLS = [
   {
     name: "web_search",
     description:
-      "Search the live web through So7oWebShell (the installed So7o Android WebView shell, using Bing) and return titles, URLs, and snippets. Use for current facts, news, docs, prices, or anything that needs a real browser.",
+      "Search the live web through So7oWebShell (the installed So7o Android WebView shell) and return titles, URLs, and snippets. Uses Bing, or DuckDuckGo HTML with engine=ddg. Use for current facts, news, docs, prices, or anything that needs a real browser. Up to 20 results; set brief to drop snippets and save tokens.",
     inputSchema: {
       type: "object",
       properties: {
@@ -17,9 +17,20 @@ const TOOLS = [
         limit: {
           type: "number",
           minimum: 1,
-          maximum: 10,
+          maximum: 20,
           default: 6,
-          description: "How many results to return (1-10).",
+          description: "How many results to return (1-20). Beyond 10, a second Bing page is fetched; keep it small to save tokens.",
+        },
+        brief: {
+          type: "boolean",
+          default: false,
+          description: "Return only title and URL, with no snippet, to save tokens.",
+        },
+        engine: {
+          type: "string",
+          enum: ["bing", "ddg"],
+          default: "bing",
+          description: "bing (about 10 per page, up to 20 with a second page) or ddg (DuckDuckGo HTML, usually 10).",
         },
       },
       required: ["query"],
@@ -72,7 +83,7 @@ const text = (value) => ({
 async function callTool(name, args = {}) {
   switch (name) {
     case "web_search":
-      return text(await search(args.query, { limit: args.limit }));
+      return text(await search(args.query, { limit: args.limit, brief: args.brief, engine: args.engine }));
     case "web_read":
       return text(await readPage(args.url, { maxChars: args.maxChars }));
     case "status":

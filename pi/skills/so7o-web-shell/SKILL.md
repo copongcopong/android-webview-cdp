@@ -11,7 +11,7 @@ and exposes a `launch` state for the MCP server.
 
 ## Use the MCP tools first
 
-- `mcp__so7o_web_shell__web_search`: `{query, limit}`. Bing results with title, URL, and snippet.
+- `mcp__so7o_web_shell__web_search`: `{query, limit, brief, engine}`. Results with title, URL, and snippet.
 - `mcp__so7o_web_shell__web_read`: `{url, maxChars}`. Final URL, title, and readable page text.
 - `mcp__so7o_web_shell__status`: are the app and relay running?
 - `mcp__so7o_web_shell__launch`: start the app through the home tile.
@@ -27,8 +27,9 @@ await tools.mcp__so7o_web_shell__web_read({ url: "https://omarchy.org/" })
 
 1. If a search reports that So7o is not running, call `launch`. If that fails,
    ask the user to open So7o from the app drawer. The launch tile must be on home.
-2. Search with a specific query and ask for 4 to 8 results. Do not repeat the
-   same query.
+2. Search with a specific query and ask for 4 to 8 results. Use `brief: true`
+   for a broad list, or `limit: 20` with `brief` to scan many titles cheaply. Do
+   not repeat the same query.
 3. Read one or two of the best results with `web_read`, then answer from the page
    text. Snippets can miss context. Cite the final URLs.
 4. If a page is a login wall or paywall, or a JavaScript app with no text, say so
@@ -50,7 +51,8 @@ node ~/.local/share/So7oWebShell/cdp.mjs --repl
 
 ## Notes and limits
 
-- Search is Bing through the phone's WebView. Keep the URL bare (`?q=…`); extra
+- Bing is the default. `engine: "ddg"` uses DuckDuckGo HTML; it works in the
+  WebView but usually returns 10 results. Keep the Bing URL bare (`?q=…`); extra
   parameters (`count`, `setlang`) made Bing return junk results.
 - Results depend on region, language, and rate limits. Open the app if Bing shows
   a consent or verification page.

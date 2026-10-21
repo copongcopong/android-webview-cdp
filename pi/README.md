@@ -85,19 +85,34 @@ the relay; use Android's Force stop on `app.so7o.webview` to test the launch pat
 node ~/.local/share/So7oWebShell/So7oWebShell.mjs status
 node ~/.local/share/So7oWebShell/So7oWebShell.mjs launch
 node ~/.local/share/So7oWebShell/So7oWebShell.mjs search "omarchy linux" 6
+node ~/.local/share/So7oWebShell/So7oWebShell.mjs search "omarchy linux" 20 --brief
+node ~/.local/share/So7oWebShell/So7oWebShell.mjs search "omarchy linux" 6 --ddg
 node ~/.local/share/So7oWebShell/So7oWebShell.mjs read https://omarchy.org/ 12000
 node ~/.local/share/So7oWebShell/cdp.mjs --repl
 ```
 
 ## Notes
 
-- Search is Bing in the phone's WebView. Keep the URL bare (`?q=…`). Adding
-  `count` or `setlang` made Bing return unrelated results.
+- Search uses Bing by default. `engine: "ddg"` uses DuckDuckGo HTML, which also
+  works in the WebView. Keep the Bing URL bare (`?q=…`); adding `count` or
+  `setlang` made Bing return unrelated results.
+- `limit` defaults to 6 and goes to 20. Bing fetches a second page past 10.
+  `brief: true` drops snippets and returns only title and URL.
 - `read` returns page text only; it does not capture screenshots. Screenshots
   need the app in the foreground and are outside this workflow.
 - `search` and `read` include a `usage` block with `chars`, `words`, and
   `approx_tokens` (characters divided by 3.5). The MCP JSON is pretty-printed, so
   the model sees a little more. Use the model's reported usage for billing.
+
+Measured with `gpt-tokenizer` on pretty JSON:
+
+| Query | Results | Tokens |
+|---|---|---|
+| Bing, snippets | 6 | 468 |
+| Bing, `brief` | 6 | 254 |
+| Bing, snippets | 18 | 1,395 |
+| Bing, `brief` | 18 | 743 |
+| DDG, snippets | 6 | 490 |
 - Updating the app leaves the installed CLI, skill, and tile in place.
   Updating those leaves the app alone.
 
