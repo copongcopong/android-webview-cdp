@@ -1,0 +1,39 @@
+widget "So7oWebShell" {
+  page: 2
+  order: 4
+  size: 3x3
+  minSize: 3x2
+
+  requires { pacman: ["curl"] }
+
+  meta {
+    owl: 11
+    description: "So7oWebShell: open the installed So7o Android WebView shell, check its CDP relay, or start a CDP REPL."
+    version: "1.0"
+    license: "MIT"
+    category: "dev"
+  }
+
+  source now = clock every 1m
+  source relay = cmd("curl -fsS --max-time 2 http://127.0.0.1:9334/json/version 2>/dev/null") every 20s json status
+
+  // The MCP server sets this to ask the launcher to open the app.
+  state launch = 0
+  on launch { if value > 0 { androidApp("app.so7o.webview") } }
+
+  Column {
+    gap: 4
+    fill: true
+    Row {
+      Text { text: "So7oWebShell"; style: body; bold: true; weight: 1; maxLines: 1 }
+      Text { text: relay.ok ? "●" : "○"; color: relay.ok ? green : muted; style: title }
+    }
+    Text { text: relay.ok ? "CDP relay up" : "shell stopped"; style: small; color: muted }
+    Text { text: relay.ok ? (get(relay.out, "Browser") ?? "relay") : "launch to start it"; style: label; color: muted; maxLines: 1 }
+    Row {
+      gap: 6
+      Button { text: relay.ok ? "open" : "launch"; onTap: androidApp("app.so7o.webview") }
+      Button { text: "cdp"; color: muted; onTap: terminal("node ~/.local/share/So7oWebShell/cdp.mjs --repl", "So7oWebShell cdp") }
+    }
+  }
+}
